@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- saved from url=(0046)file:///C:/Users/paulr/Downloads/index_10.html -->
+<!-- saved from url=(0046)file:///C:/Users/paulr/Downloads/index_11.html -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -669,7 +669,7 @@ function drawBars(id, labels, datasets, ttId) {
   const cW=W-PL-PR, cH=H-PT-PB;
   const allV=datasets.flatMap(d=>d.data);
   const mx=Math.max(...allV,1);
-  const niceMax=Math.ceil(mx/1000)*1000||1;
+  const niceMax=Math.ceil(mx*1.12/1000)*1000||1;
   const TICKS=4;
   const n=labels.length, ds=datasets.length;
   const groupW=cW/n;
@@ -738,7 +738,9 @@ function drawLine(id, labels, data, curYear, cmpYear, ttId, xOverride, incomplet
   const cW=W-PL-PR, cH=H-PT-PB;
   const validData=data.filter(v=>v>0);
   const mx=Math.max(...(validData.length?validData:[1]));
-  const niceMax=Math.ceil(mx/1000)*1000||1;
+  // Add 15% headroom so point labels never get clipped at the top
+  const mxPadded=mx*1.15;
+  const niceMax=Math.ceil(mxPadded/1000)*1000||1;
   const TICKS=4;
   const n=labels.length;
   const step=cW/Math.max(n-1,1);
