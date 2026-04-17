@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+<!-- saved from url=(0043)file:///C:/Users/paulr/Downloads/index.html -->
+<html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NYC Crime Complaints — YTD Dashboard</title>
+<script src="./index_files/chart.umd.js.download"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #ffffff;
+    --bg2:       #f5f4f0;
+    --bg3:       #eceae4;
+    --text:      #1a1a18;
+    --text2:     #5f5e5a;
+    --text3:     #888780;
+    --border:    rgba(0,0,0,0.12);
+    --border2:   rgba(0,0,0,0.22);
+    --blue:      #378ADD;
+    --blue-lt:   #B5D4F4;
+    --blue-bg:   #E6F1FB;
+    --red:       #E24B4A;
+    --red-bg:    #FCEBEB;
+    --green:     #639922;
+    --green-bg:  #EAF3DE;
+    --radius:    8px;
+    --radius-lg: 12px;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg:      #1e1e1c;
+      --bg2:     #2a2a28;
+      --bg3:     #343432;
+      --text:    #f0ede6;
+      --text2:   #b4b2a9;
+      --text3:   #888780;
+      --border:  rgba(255,255,255,0.12);
+      --border2: rgba(255,255,255,0.22);
+      --blue-bg: #042C53;
+      --red-bg:  #501313;
+      --green-bg:#173404;
+    }
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: var(--bg3);
+    color: var(--text);
+    font-size: 14px;
+    line-height: 1.5;
+    min-height: 100vh;
+  }
+
+  /* ── Layout ── */
+  .page { max-width: 1100px; margin: 0 auto; padding: 2rem 1.5rem 4rem; }
+
+  .top-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+  }
+  .top-bar h1 { font-size: 20px; font-weight: 500; color: var(--text); }
+  .top-bar .sub { font-size: 12px; color: var(--text3); margin-top: 2px; }
+  .meta-badge {
+    font-size: 11px;
+    background: var(--bg2);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius);
+    padding: 4px 10px;
+    color: var(--text3);
+    white-space: nowrap;
+  }
+
+  /* ── Controls ── */
+  .controls {
+    background: var(--bg);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 1rem 1.25rem;
+    margin-bottom: 1.25rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.25rem;
+    align-items: flex-end;
+  }
+  .ctrl { display: flex; flex-direction: column; gap: 5px; }
+  .ctrl label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text3);
+    font-weight: 500;
+  }
+  select, .toggle-group {
+    font-size: 13px;
+    height: 34px;
+    border-radius: var(--radius);
+    border: 0.5px solid var(--border2);
+    background: var(--bg);
+    color: var(--text);
+    padding: 0 10px;
+    cursor: pointer;
+  }
+  select { min-width: 260px; }
+  .ctrl--crime select { min-width: 300px; }
+  select:focus { outline: 2px solid var(--blue); outline-offset: 1px; }
+
+  .toggle-group {
+    display: flex;
+    padding: 0;
+    overflow: hidden;
+    gap: 0;
+  }
+  .toggle-group button {
+    flex: 1;
+    border: none;
+    background: transparent;
+    color: var(--text2);
+    font-size: 12px;
+    padding: 0 14px;
+    cursor: pointer;
+    border-right: 0.5px solid var(--border);
+    white-space: nowrap;
+    height: 34px;
+    font-family: inherit;
+    transition: background 0.1s;
+  }
+  .toggle-group button:last-child { border-right: none; }
+  .toggle-group button.active {
+    background: var(--blue-bg);
+    color: var(--blue);
+    font-weight: 500;
+  }
+
+  /* ── Metric cards ── */
+  .metrics {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+    margin-bottom: 1.25rem;
+  }
+  .metric {
+    background: var(--bg);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 1rem;
+  }
+  .metric .m-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text3);
+    margin-bottom: 6px;
+  }
+  .metric .m-val {
+    font-size: 26px;
+    font-weight: 500;
+    color: var(--text);
+    line-height: 1.1;
+  }
+  .metric .m-delta {
+    font-size: 11px;
+    margin-top: 4px;
+    display: flex;
+    align-items: center;
+    gap: 3px;
+  }
+  .delta-up   { color: var(--red); }
+  .delta-down { color: var(--green); }
+  .delta-flat { color: var(--text3); }
+
+  /* ── Chart cards ── */
+  .chart-row { display: grid; gap: 10px; margin-bottom: 10px; }
+  .chart-row-2 { grid-template-columns: 1fr 1fr; }
+  .chart-row-3 { grid-template-columns: 2fr 1fr; }
+
+  .card {
+    background: var(--bg);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 1rem 1.25rem;
+  }
+  .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+  }
+  .card-title { font-size: 13px; font-weight: 500; color: var(--text); }
+  .card-sub   { font-size: 11px; color: var(--text3); margin-top: 1px; }
+
+  .legend {
+    display: flex;
+    gap: 14px;
+    font-size: 11px;
+    color: var(--text2);
+    flex-wrap: wrap;
+  }
+  .legend span {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .leg-swatch {
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    flex-shrink: 0;
+  }
+
+  .chart-wrap { position: relative; }
+
+  /* ── Borough bars ── */
+  .boro-list { display: flex; flex-direction: column; gap: 8px; }
+  .boro-row {}
+  .boro-labels {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: var(--text2);
+    margin-bottom: 3px;
+  }
+  .boro-bar-bg {
+    height: 6px;
+    background: var(--bg2);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .boro-bar-fill {
+    height: 100%;
+    background: var(--blue);
+    border-radius: 3px;
+    transition: width 0.4s ease;
+  }
+
+  /* ── Loading / error states ── */
+  .state-screen {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 60vh;
+    gap: 1rem;
+    color: var(--text2);
+    text-align: center;
+  }
+  .state-screen .icon { font-size: 32px; }
+  .state-screen h2 { font-size: 16px; font-weight: 500; color: var(--text); }
+  .state-screen p { font-size: 13px; max-width: 420px; line-height: 1.6; }
+  .state-screen code {
+    display: inline-block;
+    background: var(--bg2);
+    border: 0.5px solid var(--border);
+    border-radius: 4px;
+    padding: 2px 7px;
+    font-family: monospace;
+    font-size: 12px;
+  }
+
+  /* ── Responsive ── */
+  @media (max-width: 720px) {
+    .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .chart-row-2, .chart-row-3 { grid-template-columns: 1fr; }
+    select { min-width: 100%; }
+    .ctrl--crime select { min-width: 100%; }
+    .controls { flex-direction: column; }
+  }
+</style>
+</head>
+<body>
+<div class="page" id="app">
+      <div class="state-screen">
+        <div class="icon">📂</div>
+        <h2>Data file not found</h2>
+        <p>
+          Place <code>crime_data.json</code> in the same folder as this HTML file,
+          then reload the page.<br><br>
+          Generate it by running:<br>
+          <code>python fetch_nypd_data.py</code>
+        </p>
+      </div>
+    </div>
+
+<script>
+// ─────────────────────────────────────────────────────────────────────────────
+// Constants & helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+const BLUE      = "#378ADD";
+const BLUE_LT   = "#B5D4F4";
+const BLUE_DARK = "#185FA5";
+const TEAL      = "#1D9E75";
+const TEAL_LT   = "#9FE1CB";
+const CORAL     = "#D85A30";
+const CORAL_LT  = "#F5C4B3";
+const AMBER     = "#BA7517";
+const AMBER_LT  = "#FAC775";
+const GRAY      = "#888780";
+const GRAY_LT   = "#D3D1C7";
+
+const BOROUGHS = ["All boroughs", "Bronx", "Brooklyn", "Manhattan", "Queens", "Staten Island"];
+const QUARTERS = ["Q1", "Q2", "Q3", "Q4"];
+
+function fmt(n) {
+  if (n == null || isNaN(n)) return "—";
+  return Math.round(n).toLocaleString();
+}
+
+function pctDelta(curr, prev) {
+  if (!prev || prev === 0) return null;
+  return ((curr - prev) / prev) * 100;
+}
+
+function deltaDisplay(curr, prev) {
+  const pct = pctDelta(curr, prev);
+  if (pct == null) return { text: "No prior data", cls: "delta-flat" };
+  const sign = pct > 0 ? "+" : "";
+  const arrow = pct > 0 ? "▲" : pct < 0 ? "▼" : "▬";
+  const cls = pct > 0 ? "delta-up" : pct < 0 ? "delta-down" : "delta-flat";
+  return { text: `${arrow} ${sign}${pct.toFixed(1)}% vs prior year`, cls };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// State
+// ─────────────────────────────────────────────────────────────────────────────
+
+let DATA = null;
+let META = null;
+
+let state = {
+  crime:    null,   // current crime name or group name
+  loc:      "citywide",
+  borough:  "All boroughs",
+  cmpYear:  null,   // year to compare against (string)
+};
+
+let charts = {};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Data access
+// ─────────────────────────────────────────────────────────────────────────────
+
+function getCount(crime, loc, borough, year, quarter) {
+  try {
+    const v = DATA[crime]?.[loc]?.[borough]?.[String(year)]?.[quarter];
+    return v ? parseInt(v) : 0;
+  } catch { return 0; }
+}
+
+function getYTDTotal(crime, loc, borough, year, upToQuarter) {
+  // Sum Q1..upToQuarter for the given year
+  const qIdx = QUARTERS.indexOf(upToQuarter);
+  let total = 0;
+  for (let i = 0; i <= qIdx; i++) {
+    total += getCount(crime, loc, borough, year, QUARTERS[i]);
+  }
+  return total;
+}
+
+function getAllYears() {
+  // Collect all years present across the whole dataset
+  const years = new Set();
+  const crimeData = DATA[state.crime];
+  if (!crimeData) return [];
+  const locData = crimeData[state.loc];
+  if (!locData) return [];
+  const boroData = locData[state.borough];
+  if (!boroData) return [];
+  Object.keys(boroData).forEach(y => years.add(y));
+  return Array.from(years).map(Number).sort((a,b) => a-b);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Build UI
+// ─────────────────────────────────────────────────────────────────────────────
+
+function buildApp() {
+  const app = document.getElementById("app");
+
+  // Crime dropdown options: groups first, then individual
+  const groupOpts = META.crime_groups.map(g =>
+    `<option value="${g}">— ${g} —</option>`
+  ).join("");
+  const crimeOpts = META.crime_types.map(c =>
+    `<option value="${c}">${c.charAt(0) + c.slice(1).toLowerCase()}</option>`
+  ).join("");
+
+  // Comparison year options (all years except current)
+  const currentYear = META.current_year;
+  const allYears = [];
+  for (let y = currentYear - 1; y >= 2006; y--) allYears.push(y);
+  const cmpOpts = allYears.map(y =>
+    `<option value="${y}" ${y === currentYear - 1 ? "selected" : ""}>vs. ${y}</option>`
+  ).join("");
+
+  app.innerHTML = `
+    <div class="top-bar">
+      <div>
+        <h1>NYC crime complaints — year to date</h1>
+        <div class="sub">NYPD complaint data · source: NYC Open Data</div>
+      </div>
+      <div class="meta-badge" id="meta-badge">
+        Data through ${META.ytd_through} · updated ${new Date(META.generated).toLocaleDateString("en-US", {month:"short", day:"numeric", year:"numeric"})}
+      </div>
+    </div>
+
+    <div class="controls">
+      <div class="ctrl ctrl--crime">
+        <label>Crime category</label>
+        <select id="sel-crime">
+          <optgroup label="Combined categories">${groupOpts}</optgroup>
+          <optgroup label="Individual offenses">${crimeOpts}</optgroup>
+        </select>
+      </div>
+      <div class="ctrl">
+        <label>Location</label>
+        <div class="toggle-group" id="loc-toggle">
+          <button data-loc="citywide" class="active">Citywide</button>
+          <button data-loc="subway">Subway</button>
+          <button data-loc="housing">Housing</button>
+        </div>
+      </div>
+      <div class="ctrl">
+        <label>Borough</label>
+        <select id="sel-borough">
+          ${BOROUGHS.map(b => `<option value="${b}">${b}</option>`).join("")}
+        </select>
+      </div>
+      <div class="ctrl">
+        <label>Comparison year</label>
+        <select id="sel-cmp">${cmpOpts}</select>
+      </div>
+    </div>
+
+    <div class="metrics" id="metrics-row"></div>
+
+    <div class="chart-row chart-row-3" style="margin-bottom:10px;">
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">Monthly complaints — YTD</div>
+            <div class="card-sub" id="monthly-sub"></div>
+          </div>
+          <div class="legend" id="monthly-legend"></div>
+        </div>
+        <div class="chart-wrap" style="height:220px;"><canvas id="chart-monthly" role="img" aria-label="Monthly complaint counts YTD"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">By borough — YTD</div>
+        </div>
+        <div class="boro-list" id="boro-list"></div>
+      </div>
+    </div>
+
+    <div class="chart-row chart-row-2">
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">Quarter-by-quarter comparison</div>
+            <div class="card-sub" id="qtr-sub"></div>
+          </div>
+          <div class="legend" id="qtr-legend"></div>
+        </div>
+        <div class="chart-wrap" style="height:200px;"><canvas id="chart-qtr" role="img" aria-label="Quarter by quarter comparison"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">Long-term trend — since 2006</div>
+            <div class="card-sub" id="trend-sub"></div>
+          </div>
+        </div>
+        <div class="chart-wrap" style="height:200px;"><canvas id="chart-trend" role="img" aria-label="Long term trend since 2006"></canvas></div>
+      </div>
+    </div>
+  `;
+
+  // Wire up controls
+  document.getElementById("sel-crime").addEventListener("change", e => {
+    state.crime = e.target.value;
+    render();
+  });
+  document.getElementById("sel-borough").addEventListener("change", e => {
+    state.borough = e.target.value;
+    render();
+  });
+  document.getElementById("sel-cmp").addEventListener("change", e => {
+    state.cmpYear = String(e.target.value);
+    render();
+  });
+  document.getElementById("loc-toggle").addEventListener("click", e => {
+    const btn = e.target.closest("button");
+    if (!btn) return;
+    document.querySelectorAll("#loc-toggle button").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    state.loc = btn.dataset.loc;
+    render();
+  });
+
+  // Set initial state
+  state.crime   = META.crime_groups[0];
+  state.cmpYear = String(currentYear - 1);
+  document.getElementById("sel-crime").value = state.crime;
+  document.getElementById("sel-cmp").value   = state.cmpYear;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Render
+// ─────────────────────────────────────────────────────────────────────────────
+
+function render() {
+  const curYear  = META.current_year;
+  const curQ     = META.current_quarter; // "Q1"–"Q4"
+  const cmpYear  = state.cmpYear;
+  const crime    = state.crime;
+  const loc      = state.loc;
+  const borough  = state.borough;
+
+  const curYTD = getYTDTotal(crime, loc, borough, curYear, curQ);
+  const cmpYTD = getYTDTotal(crime, loc, borough, cmpYear, curQ);
+
+  // ── Metrics ──────────────────────────────────────────────────────────────
+  const qIdx = QUARTERS.indexOf(curQ);
+
+  const metricsEl = document.getElementById("metrics-row");
+
+  const metrics = [
+    {
+      label: `YTD total (${curYear})`,
+      val:   fmt(curYTD),
+      delta: deltaDisplay(curYTD, cmpYTD),
+    },
+    ...QUARTERS.slice(0, qIdx + 1).map(q => {
+      const c = getCount(crime, loc, borough, curYear, q);
+      const p = getCount(crime, loc, borough, cmpYear, q);
+      return { label: `${q} ${curYear}`, val: fmt(c), delta: deltaDisplay(c, p) };
+    }),
+  ];
+
+  // Pad to 4 columns
+  while (metrics.length < 4) {
+    metrics.push({ label: `Q${metrics.length} ${curYear}`, val: "—", delta: { text: "Not yet available", cls: "delta-flat" } });
+  }
+  // Show at most 4
+  const shown = metrics.slice(0, 4);
+
+  metricsEl.innerHTML = shown.map(m => `
+    <div class="metric">
+      <div class="m-label">${m.label}</div>
+      <div class="m-val">${m.val}</div>
+      <div class="m-delta ${m.delta.cls}">${m.delta.text}</div>
+    </div>
+  `).join("");
+
+  // ── Monthly chart ─────────────────────────────────────────────────────────
+  const monthNames = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  // month → quarter mapping (1-indexed)
+  function qForMonth(m) {
+    if (m <= 3) return "Q1";
+    if (m <= 6) return "Q2";
+    if (m <= 9) return "Q3";
+    return "Q4";
+  }
+  const maxMonth = (QUARTERS.indexOf(curQ) + 1) * 3; // last visible month
+
+  // Aggregate monthly from quarterly structure — we only have quarterly granularity
+  // So distribute each quarter evenly across its 3 months (best we can without raw rows)
+  function getMonthlyApprox(year) {
+    const vals = [];
+    for (let m = 1; m <= maxMonth; m++) {
+      const q = qForMonth(m);
+      const qTotal = getCount(crime, loc, borough, year, q);
+      vals.push(Math.round(qTotal / 3));
+    }
+    return vals;
+  }
+
+  const curMonthly = getMonthlyApprox(curYear);
+  const cmpMonthly = getMonthlyApprox(cmpYear);
+  const labels = monthNames.slice(0, maxMonth);
+
+  document.getElementById("monthly-sub").textContent =
+    `${curYear} vs ${cmpYear} · Q1–${curQ}`;
+  document.getElementById("monthly-legend").innerHTML = `
+    <span><span class="leg-swatch" style="background:${BLUE_LT}"></span>${cmpYear}</span>
+    <span><span class="leg-swatch" style="background:${BLUE}"></span>${curYear}</span>
+  `;
+
+  renderBarChart("chart-monthly", labels, [
+    { label: String(cmpYear), data: cmpMonthly, color: BLUE_LT },
+    { label: String(curYear), data: curMonthly, color: BLUE },
+  ]);
+
+  // ── Borough bars ──────────────────────────────────────────────────────────
+  const boroData = BOROUGHS.filter(b => b !== "All boroughs").map(b => ({
+    name: b,
+    val:  getYTDTotal(crime, loc, b, curYear, curQ),
+  })).sort((a, b) => b.val - a.val);
+
+  const boroMax = Math.max(...boroData.map(b => b.val), 1);
+  const boroTotal = boroData.reduce((s, b) => s + b.val, 0);
+
+  document.getElementById("boro-list").innerHTML = boroData.map(b => {
+    const pct = boroTotal > 0 ? ((b.val / boroTotal) * 100).toFixed(1) : "0.0";
+    const barW = boroMax > 0 ? (b.val / boroMax * 100).toFixed(1) : "0";
+    return `
+      <div class="boro-row">
+        <div class="boro-labels">
+          <span>${b.name}</span>
+          <span>${fmt(b.val)} &nbsp;(${pct}%)</span>
+        </div>
+        <div class="boro-bar-bg">
+          <div class="boro-bar-fill" style="width:${barW}%"></div>
+        </div>
+      </div>
+    `;
+  }).join("");
+
+  // ── Quarter comparison chart ──────────────────────────────────────────────
+  const qLabels = QUARTERS.slice(0, qIdx + 1);
+  const curQData = qLabels.map(q => getCount(crime, loc, borough, curYear, q));
+  const cmpQData = qLabels.map(q => getCount(crime, loc, borough, cmpYear, q));
+
+  document.getElementById("qtr-sub").textContent = `${curYear} vs ${cmpYear}`;
+  document.getElementById("qtr-legend").innerHTML = `
+    <span><span class="leg-swatch" style="background:${BLUE_LT}"></span>${cmpYear}</span>
+    <span><span class="leg-swatch" style="background:${BLUE}"></span>${curYear}</span>
+  `;
+
+  renderBarChart("chart-qtr", qLabels, [
+    { label: String(cmpYear), data: cmpQData, color: BLUE_LT },
+    { label: String(curYear), data: curQData, color: BLUE },
+  ]);
+
+  // ── Long-term trend line ──────────────────────────────────────────────────
+  const allYears = getAllYears();
+  const trendLabels = allYears.map(String);
+  const trendData   = allYears.map(y => getYTDTotal(crime, loc, borough, y, curQ));
+
+  document.getElementById("trend-sub").textContent =
+    `Each year = YTD through ${curQ} · ${trendLabels[0]}–${trendLabels[trendLabels.length - 1]}`;
+
+  renderLineChart("chart-trend", trendLabels, trendData, curYear, cmpYear);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Chart renderers
+// ─────────────────────────────────────────────────────────────────────────────
+
+function destroyChart(id) {
+  if (charts[id]) { charts[id].destroy(); delete charts[id]; }
+}
+
+const isDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+const gridColor  = isDark ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.06)";
+const labelColor = isDark ? "#888780" : "#888780";
+
+const baseOpts = {
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: { legend: { display: false }, tooltip: { mode: "index", intersect: false } },
+  scales: {
+    x: { grid: { color: gridColor }, ticks: { color: labelColor, font: { size: 11 } } },
+    y: {
+      grid: { color: gridColor },
+      ticks: {
+        color: labelColor,
+        font: { size: 11 },
+        callback: v => v >= 1000 ? (v/1000).toFixed(0) + "k" : v,
+      },
+      beginAtZero: true,
+    },
+  },
+};
+
+function renderBarChart(id, labels, datasets) {
+  destroyChart(id);
+  const ctx = document.getElementById(id).getContext("2d");
+  charts[id] = new Chart(ctx, {
+    type: "bar",
+    data: {
+      labels,
+      datasets: datasets.map(d => ({
+        label: d.label,
+        data:  d.data,
+        backgroundColor: d.color,
+        borderRadius: 3,
+        borderSkipped: false,
+        barPercentage: 0.8,
+        categoryPercentage: 0.85,
+      })),
+    },
+    options: {
+      ...baseOpts,
+      scales: {
+        ...baseOpts.scales,
+        x: { ...baseOpts.scales.x, ticks: { ...baseOpts.scales.x.ticks, autoSkip: false } },
+      },
+    },
+  });
+}
+
+function renderLineChart(id, labels, data, curYear, cmpYear) {
+  destroyChart(id);
+  const ctx = document.getElementById(id).getContext("2d");
+
+  // Color each point: current year = solid blue, compare year = coral, others = gray
+  const pointColors = labels.map(y => {
+    if (y === String(curYear))  return BLUE;
+    if (y === String(cmpYear))  return CORAL;
+    return GRAY;
+  });
+  const pointRadius = labels.map(y =>
+    (y === String(curYear) || y === String(cmpYear)) ? 5 : 3
+  );
+
+  charts[id] = new Chart(ctx, {
+    type: "line",
+    data: {
+      labels,
+      datasets: [{
+        label: "YTD complaints",
+        data,
+        borderColor: BLUE,
+        borderWidth: 2,
+        pointBackgroundColor: pointColors,
+        pointRadius,
+        pointHoverRadius: 6,
+        fill: false,
+        tension: 0.3,
+      }],
+    },
+    options: {
+      ...baseOpts,
+      scales: {
+        ...baseOpts.scales,
+        x: {
+          ...baseOpts.scales.x,
+          ticks: {
+            ...baseOpts.scales.x.ticks,
+            maxTicksLimit: 10,
+            maxRotation: 45,
+          },
+        },
+      },
+    },
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Boot
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function boot() {
+  let raw;
+  try {
+    const resp = await fetch("crime_data.json");
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    raw = await resp.json();
+  } catch (err) {
+    document.getElementById("app").innerHTML = `
+      <div class="state-screen">
+        <div class="icon">📂</div>
+        <h2>Data file not found</h2>
+        <p>
+          Place <code>crime_data.json</code> in the same folder as this HTML file,
+          then reload the page.<br><br>
+          Generate it by running:<br>
+          <code>python fetch_nypd_data.py</code>
+        </p>
+      </div>
+    `;
+    return;
+  }
+
+  META = raw.meta;
+  META.crime_groups = raw.crime_groups || [];
+  META.crime_types  = raw.crime_types  || [];
+  DATA = raw.data;
+
+  buildApp();
+  render();
+}
+
+boot();
+</script>
+
+
+</body></html>

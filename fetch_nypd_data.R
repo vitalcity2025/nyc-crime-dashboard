@@ -1,0 +1,259 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# NYPD Crime Complaint Data Fetcher
+# Run this script each quarter to refresh crime_data.json.
+# From RStudio: open this file, paste your token below, click Source
+#
+# Requires: install.packages(c("httr", "jsonlite"))
+# ─────────────────────────────────────────────────────────────────────────────
+
+library(httr)
+library(jsonlite)
+
+# !! PASTE YOUR FREE APP TOKEN BETWEEN THE QUOTES BELOW !!
+# Get one at: data.cityofnewyork.us -> Sign In -> Developer Settings -> Create New App Token
+APP_TOKEN <- ""
+
+HISTORIC_ENDPOINT <- "https://data.cityofnewyork.us/resource/qgea-i56i.json"
+YTD_ENDPOINT      <- "https://data.cityofnewyork.us/resource/5uac-w243.json"
+
+# ── SET THESE MANUALLY EACH QUARTER ─────────────────────────────────────────
+# Update these two lines when new data becomes available.
+# current_year    = the most recent year with data (e.g. 2025)
+# current_quarter = the most recent quarter available (1, 2, 3, or 4)
+current_year    <- 2025
+current_quarter <- 4
+# ─────────────────────────────────────────────────────────────────────────────
+
+ytd_end_month <- current_quarter * 3
+today         <- Sys.Date()
+
+cat(sprintf("Data set to: %d Q%d  |  YTD through month %d  |  (today is %s)\n",
+            current_year, current_quarter, ytd_end_month, today))
+
+# ── Crime groups ──────────────────────────────────────────────────────────────
+
+CRIME_GROUPS <- list(
+  "Major crimes" = c(
+    "FELONY ASSAULT", "ROBBERY", "BURGLARY",
+    "GRAND LARCENY", "GRAND LARCENY OF MOTOR VEHICLE",
+    "RAPE", "MURDER & NON-NEGL. MANSLAUGHTER"
+  ),
+  "Major violent crimes" = c(
+    "FELONY ASSAULT", "ROBBERY", "RAPE", "MURDER & NON-NEGL. MANSLAUGHTER"
+  ),
+  "Major property crimes" = c(
+    "BURGLARY", "GRAND LARCENY", "GRAND LARCENY OF MOTOR VEHICLE"
+  ),
+  "All assaults (felony + misdemeanor + harassment/menacing)" = c(
+    "FELONY ASSAULT", "ASSAULT 3 & RELATED OFFENSES",
+    "HARRASSMENT 2", "HARASSMENT 2",
+    "MENACING,RECKLESS ENDANGERMENT", "OFFENSES AGAINST THE PERSON"
+  )
+)
+
+BOROUGH_MAP <- c(
+  "PATROL BORO BRONX"         = "Bronx",
+  "PATROL BORO BKLYN NORTH"   = "Brooklyn",
+  "PATROL BORO BKLYN SOUTH"   = "Brooklyn",
+  "PATROL BORO MAN NORTH"     = "Manhattan",
+  "PATROL BORO MAN SOUTH"     = "Manhattan",
+  "PATROL BORO QUEENS NORTH"  = "Queens",
+  "PATROL BORO QUEENS SOUTH"  = "Queens",
+  "PATROL BORO STATEN ISLAND" = "Staten Island"
+)
+
+# ── Socrata query with pagination ─────────────────────────────────────────────
+# Fetches ALL rows by looping with $offset until we get fewer than page_size back
+
+socrata_query_all <- function(endpoint, soql, page_size = 50000) {
+  all_results <- list()
+  offset <- 0
+
+  repeat {
+    # Append LIMIT and OFFSET to the SoQL query
+    paged_soql <- sprintf("%s LIMIT %d OFFSET %d", soql, page_size, offset)
+
+    qparams <- list(`$query` = paged_soql)
+    if (nchar(APP_TOKEN) > 0) qparams[["$$app_token"]] <- APP_TOKEN
+
+    resp <- GET(
+      url   = endpoint,
+      query = qparams,
+      add_headers(Accept = "application/json"),
+      timeout(120)
+    )
+    if (http_error(resp)) {
+      stop(paste("API error:", status_code(resp), content(resp, "text", encoding = "UTF-8")))
+    }
+
+    batch <- fromJSON(content(resp, "text", encoding = "UTF-8"), flatten = TRUE)
+
+    if (is.null(batch) || !is.data.frame(batch) || nrow(batch) == 0) break
+
+    all_results[[length(all_results) + 1]] <- batch
+    if (nrow(batch) < page_size) break   # last page
+    offset <- offset + page_size
+    Sys.sleep(0.2)
+  }
+
+  if (length(all_results) == 0) return(NULL)
+  do.call(rbind, all_results)
+}
+
+# ── Build SoQL for one year ───────────────────────────────────────────────────
+
+build_soql <- function(year, ytd_month_end) {
+  loc_expr <- paste0(
+    "CASE ",
+    "WHEN upper(prem_typ_desc) LIKE '%TRANSIT%' OR upper(prem_typ_desc) LIKE '%SUBWAY%' THEN 'subway' ",
+    "WHEN upper(prem_typ_desc) LIKE '%NYCHA%' OR upper(prem_typ_desc) LIKE '%PUBLIC HOUSING%' THEN 'housing' ",
+    "ELSE 'other' END"
+  )
+  q_expr <- paste0(
+    "CASE ",
+    "WHEN date_extract_m(cmplnt_fr_dt) <= 3 THEN 'Q1' ",
+    "WHEN date_extract_m(cmplnt_fr_dt) <= 6 THEN 'Q2' ",
+    "WHEN date_extract_m(cmplnt_fr_dt) <= 9 THEN 'Q3' ",
+    "ELSE 'Q4' END"
+  )
+  sprintf(
+    "SELECT date_extract_y(cmplnt_fr_dt) AS yr, %s AS quarter,
+            ofns_desc, patrol_boro, %s AS loc_type, COUNT(*) AS n
+     WHERE  cmplnt_fr_dt >= '%d-01-01T00:00:00'
+       AND  cmplnt_fr_dt <  '%d-01-01T00:00:00'
+       AND  date_extract_m(cmplnt_fr_dt) <= %d
+       AND  ofns_desc IS NOT NULL
+     GROUP BY yr, quarter, ofns_desc, patrol_boro, loc_type",
+    q_expr, loc_expr,
+    year, year + 1, ytd_month_end
+  )
+}
+
+# ── Fetch all years ───────────────────────────────────────────────────────────
+
+all_rows <- list()
+
+# Historic dataset: 2006 through 2024 (confirmed range)
+hist_end <- 2024
+cat(sprintf("\nFetching historic data year by year (2006-%d)...\n", hist_end))
+
+for (yr in 2006:hist_end) {
+  cat(sprintf("  Fetching %d... ", yr))
+  result <- tryCatch(
+    socrata_query_all(HISTORIC_ENDPOINT, build_soql(yr, ytd_end_month)),
+    error = function(e) { cat(sprintf("ERROR: %s\n", e$message)); NULL }
+  )
+  if (!is.null(result) && is.data.frame(result) && nrow(result) > 0) {
+    all_rows[[length(all_rows) + 1]] <- result
+    cat(sprintf("%d rows\n", nrow(result)))
+  } else {
+    cat("no data\n")
+  }
+  Sys.sleep(0.3)
+}
+
+# YTD dataset: current year (and any years not yet in historic)
+# hist_end is hardcoded to 2024 — update to 2025 once that moves to historic
+ytd_years <- unique(c(current_year))
+if (current_year > 2025) ytd_years <- unique(c(2025, ytd_years))
+cat(sprintf("\nFetching YTD data (%s)...\n", paste(ytd_years, collapse=" and ")))
+for (yr in ytd_years) {
+  cat(sprintf("  Fetching %d... ", yr))
+  result <- tryCatch(
+    socrata_query_all(YTD_ENDPOINT, build_soql(yr, ytd_end_month)),
+    error = function(e) { cat(sprintf("ERROR: %s\n", e$message)); NULL }
+  )
+  if (!is.null(result) && is.data.frame(result) && nrow(result) > 0) {
+    all_rows[[length(all_rows) + 1]] <- result
+    cat(sprintf("%d rows\n", nrow(result)))
+  } else {
+    cat("no data\n")
+  }
+  Sys.sleep(0.3)
+}
+
+all_rows <- do.call(rbind, all_rows)
+cat(sprintf("\nTotal rows fetched: %d\n", nrow(all_rows)))
+
+# ── Process ───────────────────────────────────────────────────────────────────
+
+cat("Processing...\n")
+
+all_rows$ofns_desc   <- toupper(trimws(as.character(all_rows$ofns_desc)))
+all_rows$patrol_boro <- toupper(trimws(as.character(all_rows$patrol_boro)))
+all_rows$loc_type    <- as.character(all_rows$loc_type)
+all_rows$quarter     <- as.character(all_rows$quarter)
+all_rows$yr          <- as.character(as.integer(as.numeric(all_rows$yr)))
+all_rows$n           <- as.integer(as.numeric(all_rows$n))
+
+all_rows <- all_rows[
+  !is.na(all_rows$ofns_desc) & all_rows$ofns_desc != "" &
+  !is.na(all_rows$n) & all_rows$n > 0 &
+  !is.na(all_rows$yr) & all_rows$yr != "0", ]
+
+all_rows$borough <- BOROUGH_MAP[all_rows$patrol_boro]
+all_rows$borough[is.na(all_rows$borough)] <- "Other"
+
+all_crime_types <- sort(unique(all_rows$ofns_desc))
+
+# Expand to three location buckets
+rows_c <- all_rows; rows_c$bucket <- "citywide"
+rows_s <- all_rows[all_rows$loc_type == "subway",  ]; rows_s$bucket <- "subway"
+rows_h <- all_rows[all_rows$loc_type == "housing", ]; rows_h$bucket <- "housing"
+expanded <- rbind(rows_c, rows_s, rows_h)
+
+# Aggregate by borough
+agg <- aggregate(n ~ ofns_desc + bucket + borough + yr + quarter,
+                 data = expanded[expanded$borough != "Other", ], FUN = sum)
+
+# Add All boroughs
+agg_all <- aggregate(n ~ ofns_desc + bucket + yr + quarter, data = expanded, FUN = sum)
+agg_all$borough <- "All boroughs"
+agg <- rbind(agg, agg_all[, names(agg)])
+
+# Add crime groups
+group_rows <- list()
+for (gname in names(CRIME_GROUPS)) {
+  members <- CRIME_GROUPS[[gname]]
+  sub     <- agg[agg$ofns_desc %in% members, ]
+  if (nrow(sub) == 0) next
+  g <- aggregate(n ~ bucket + borough + yr + quarter, data = sub, FUN = sum)
+  g$ofns_desc <- gname
+  group_rows[[gname]] <- g[, names(agg)]
+}
+if (length(group_rows) > 0) agg <- rbind(agg, do.call(rbind, group_rows))
+
+# ── Build nested JSON structure ───────────────────────────────────────────────
+
+cat("Building JSON...\n")
+data_out <- list()
+for (i in seq_len(nrow(agg))) {
+  cr <- agg$ofns_desc[i]; lo <- agg$bucket[i];  bo <- agg$borough[i]
+  yr <- agg$yr[i];        qt <- agg$quarter[i]; n  <- agg$n[i]
+  if (is.null(data_out[[cr]]))             data_out[[cr]]             <- list()
+  if (is.null(data_out[[cr]][[lo]]))       data_out[[cr]][[lo]]       <- list()
+  if (is.null(data_out[[cr]][[lo]][[bo]])) data_out[[cr]][[lo]][[bo]] <- list()
+  if (is.null(data_out[[cr]][[lo]][[bo]][[yr]])) data_out[[cr]][[lo]][[bo]][[yr]] <- list()
+  data_out[[cr]][[lo]][[bo]][[yr]][[qt]] <- n
+}
+
+output <- list(
+  meta = list(
+    generated       = format(Sys.time(), "%Y-%m-%dT%H:%M:%S"),
+    current_year    = current_year,
+    current_quarter = paste0("Q", current_quarter),
+    ytd_through     = sprintf("End of Q%d (%d months)", current_quarter, ytd_end_month)
+  ),
+  crime_types  = all_crime_types,
+  crime_groups = names(CRIME_GROUPS),
+  data         = data_out
+)
+
+out_path <- "crime_data.json"
+write(toJSON(output, auto_unbox = TRUE), out_path)
+
+size_kb <- round(file.size(out_path) / 1024)
+cat(sprintf("\nDone! Wrote %s (%d KB)\n", out_path, size_kb))
+cat(sprintf("  %d individual crime types\n", length(all_crime_types)))
+cat(sprintf("  YTD defined as Q1-Q%d of each year\n", current_quarter))
+cat("\nRefresh your browser at http://127.0.0.1:4321\n")
