@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- saved from url=(0045)file:///C:/Users/paulr/Downloads/index_9.html -->
+<!-- saved from url=(0046)file:///C:/Users/paulr/Downloads/index_10.html -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -734,7 +734,7 @@ function drawLine(id, labels, data, curYear, cmpYear, ttId, xOverride, incomplet
   // xOverride: array of display labels for x-axis (sparse, empty string = skip)
   // incomplete: array of booleans — true = this point is partial data
   const {ctx, W, H} = getCanvas(id, 200);
-  const PL=44, PR=8, PT=10, PB=28;
+  const PL=44, PR=24, PT=10, PB=28;
   const cW=W-PL-PR, cH=H-PT-PB;
   const validData=data.filter(v=>v>0);
   const mx=Math.max(...(validData.length?validData:[1]));
@@ -807,12 +807,38 @@ function drawLine(id, labels, data, curYear, cmpYear, ttId, xOverride, incomplet
       }
     });
     // X labels
-    ctx.fillStyle=C_LABEL; ctx.textAlign="center"; ctx.font="10px -apple-system,sans-serif";
+    ctx.fillStyle=C_LABEL; ctx.font="10px -apple-system,sans-serif";
     if(xOverride){
+      ctx.textAlign="center";
       xOverride.forEach((lbl,i)=>{ if(lbl) ctx.fillText(lbl,px(i),H-6); });
     } else {
-      const every=Math.ceil(n/8);
-      labels.forEach((lbl,i)=>{ if(i%every===0||i===n-1) ctx.fillText(lbl,px(i),H-6); });
+      // Pick evenly spaced round-year intervals that actually fit
+      const approxEvery=Math.ceil(n/8);
+      // Snap to nearest multiple of 3 or 5 for clean year intervals
+      const snapTo=[1,2,3,4,5,6,8,10];
+      const every=snapTo.find(s=>s>=approxEvery)||approxEvery;
+      labels.forEach((lbl,i)=>{
+        if(i%every!==0) return;
+        // Don't draw if too close to right edge (avoid clipping)
+        const x=px(i);
+        const lblW=ctx.measureText(lbl).width;
+        if(x+lblW/2>W-4) return;
+        ctx.textAlign="center";
+        ctx.fillText(lbl,x,H-6);
+      });
+      // Always draw last label if it fits and isn't too close to second-last drawn
+      const lastI=n-1;
+      const lastX=px(lastI);
+      const lastLbl=labels[lastI];
+      const lastLblW=ctx.measureText(lastLbl).width;
+      if(lastX+lastLblW/2<=W-4){
+        // Check it won't collide with previous label
+        const prevDrawnI=Math.floor(lastI/every)*every;
+        if(lastI-prevDrawnI > every*0.4){
+          ctx.textAlign="center";
+          ctx.fillText(lastLbl,lastX,H-6);
+        }
+      }
     }
     // Axis
     ctx.strokeStyle=C_AXIS; ctx.lineWidth=1;
