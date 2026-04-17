@@ -1,80 +1,94 @@
 <!DOCTYPE html>
-<!-- saved from url=(0046)file:///C:/Users/paulr/Downloads/index_13.html -->
+<!-- saved from url=(0046)file:///C:/Users/paulr/Downloads/index_14.html -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>NYC Crime Complaints — Vital City</title>
+<link rel="stylesheet" href="./index_files/qqk2vto.css">
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  --black:    #050507;
-  --white:    #ffffff;
-  --cloud:    #dddddd;
-  --orange:   #ff7c53;
-  --yellow:   #dde44c;
-  --indigo:   #394882;
-  --cerulean: #217ebe;
-  --magenta:  #e7466d;
-  --charcoal: #707175;
-  --peri:     #9b9fbc;
+  --black:      #050507;
+  --white:      #ffffff;
+  --cloud:      #dddddd;
+  --orange:     #ff7c53;
+  --yellow:     #dde44c;
+  --indigo:     #394882;
+  --cerulean:   #217ebe;
+  --magenta:    #e7466d;
+  --charcoal:   #707175;
+  --peri:       #9b9fbc;
 
-  /* Borough colors — matching Data Explorer */
   --b-bronx:    #ff7c53;
   --b-brooklyn: #217ebe;
   --b-manhattan:#e7466d;
   --b-queens:   #394882;
   --b-si:       #9b9fbc;
 
-  --text:   #050507;
-  --text2:  #707175;
-  --text3:  #9b9fbc;
-  --border: rgba(5,5,7,0.1);
-  --grid:   rgba(5,5,7,0.06);
+  --text:    #050507;
+  --text2:   #707175;
+  --text3:   #9b9fbc;
+  --border:  rgba(5,5,7,0.1);
+  --border2: rgba(5,5,7,0.18);
+  --grid:    rgba(5,5,7,0.06);
+
+  --font-primary: "halyard-text", "Inter", "Helvetica Neue", Arial, sans-serif;
 }
 
+html, body { background: var(--white); }
 body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
-  background: var(--white);
+  font-family: var(--font-primary);
+  font-weight: 300;
   color: var(--text);
   font-size: 14px;
   line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
 }
 
 /* ── Masthead ── */
 .masthead {
   background: var(--black);
-  padding: 1.5rem 2rem;
+  padding: 2rem 2.5rem 1.75rem;
   display: flex;
   justify-content: space-between;
   align-items: flex-end;
   flex-wrap: wrap;
-  gap: 1rem;
+  gap: 1.5rem;
 }
 .mast-vc {
-  font-size: 10px;
+  font-family: var(--font-primary);
   font-weight: 700;
-  letter-spacing: 0.15em;
+  font-size: 10px;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: var(--charcoal);
-  margin-bottom: 6px;
+  color: var(--orange);
+  margin-bottom: 10px;
 }
 .mast-title {
-  font-size: 28px;
-  font-weight: 700;
+  font-family: var(--font-primary);
+  font-weight: 900;
+  font-size: 38px;
   color: var(--white);
   line-height: 1;
+  letter-spacing: -0.01em;
 }
 .mast-sub {
-  font-size: 12px;
-  color: var(--charcoal);
-  margin-top: 6px;
+  font-family: var(--font-primary);
+  font-weight: 200;
+  font-size: 13px;
+  color: #c8c8c8;
+  margin-top: 10px;
 }
 .mast-badge {
-  font-size: 11px;
-  color: var(--charcoal);
-  border: 1px solid rgba(255,255,255,0.12);
-  padding: 5px 10px;
+  font-family: var(--font-primary);
+  font-weight: 700;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #c8c8c8;
+  border: 1px solid rgba(255,255,255,0.18);
+  padding: 7px 12px;
   white-space: nowrap;
   align-self: flex-start;
   margin-top: 4px;
@@ -98,46 +112,50 @@ body {
 }
 .ctrl { display: flex; flex-direction: column; gap: 5px; }
 .ctrl label {
-  font-size: 9px;
+  font-family: var(--font-primary);
   font-weight: 700;
-  letter-spacing: 0.12em;
+  font-size: 9px;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--text2);
 }
 select {
-  font-family: inherit;
-  font-size: 13px;
-  height: 34px;
-  border: 1px solid rgba(5,5,7,0.3);
+  font-family: var(--font-primary);
+  font-weight: 300;
+  font-size: 14px;
+  height: 36px;
+  border: 1px solid var(--border2);
   background: var(--white);
   color: var(--text);
-  padding: 0 28px 0 10px;
+  padding: 0 32px 0 12px;
   cursor: pointer;
   border-radius: 0;
   appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23707175'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23050507'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
-  background-position: right 10px center;
+  background-position: right 12px center;
 }
 select:focus { outline: 2px solid var(--orange); outline-offset: 0; }
 
-.toggle-group { display: flex; height: 34px; border: 1px solid rgba(5,5,7,0.3); }
+.toggle-group { display: flex; height: 36px; border: 1px solid var(--border2); }
 .toggle-group button {
   flex: 1;
   border: none;
-  border-right: 1px solid rgba(5,5,7,0.15);
+  border-right: 1px solid var(--border);
   background: var(--white);
   color: var(--text2);
-  font-family: inherit;
-  font-size: 12px;
-  font-weight: 500;
+  font-family: var(--font-primary);
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   padding: 0 18px;
   cursor: pointer;
   white-space: nowrap;
 }
 .toggle-group button:last-child { border-right: none; }
-.toggle-group button.active { background: var(--orange); color: var(--white); font-weight: 700; }
-.toggle-group button:hover:not(.active) { background: #fde5dd; }
+.toggle-group button.active { background: var(--black); color: var(--white); }
+.toggle-group button:hover:not(.active) { background: #f5f5f5; }
 
 /* ── Metrics ── */
 .metrics {
@@ -154,32 +172,35 @@ select:focus { outline: 2px solid var(--orange); outline-offset: 0; }
 }
 .metric:last-child { border-right: none; }
 .metric.ytd-metric {
-  background: #fdf3ef;
-  border-right: 1px solid rgba(255,124,83,0.25);
-  border-left: 4px solid var(--orange);
+  background: #fafafa;
+  border-left: 4px solid var(--magenta);
   padding-left: calc(1.25rem - 4px);
 }
 .m-label {
-  font-size: 9px;
+  font-family: var(--font-primary);
   font-weight: 700;
-  letter-spacing: 0.12em;
+  font-size: 9px;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--text2);
-  margin-bottom: 8px;
+  margin-bottom: 10px;
 }
-.ytd-metric .m-label { color: var(--orange); }
+.ytd-metric .m-label { color: var(--magenta); }
 .m-val {
-  font-size: 32px;
-  font-weight: 700;
-  color: var(--text);
+  font-family: var(--font-primary);
+  font-weight: 900;
+  font-size: 34px;
   line-height: 1;
+  color: var(--text);
   letter-spacing: -0.02em;
 }
-.ytd-metric .m-val { font-size: 36px; }
+.ytd-metric .m-val { font-size: 44px; }
 .m-delta {
+  font-family: var(--font-primary);
+  font-weight: 700;
   font-size: 11px;
-  font-weight: 600;
-  margin-top: 6px;
+  letter-spacing: 0.04em;
+  margin-top: 8px;
 }
 .delta-up   { color: var(--magenta); }
 .delta-down { color: #3a7a1e; }
@@ -188,19 +209,20 @@ select:focus { outline: 2px solid var(--orange); outline-offset: 0; }
 /* ── Chart sections ── */
 .chart-section { margin-bottom: 3rem; }
 .chart-title {
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  font-family: var(--font-primary);
+  font-weight: 900;
+  font-size: 15px;
   color: var(--text);
   margin-bottom: 4px;
 }
 .chart-sub {
+  font-family: var(--font-primary);
+  font-weight: 200;
   font-size: 12px;
   color: var(--text2);
   margin-bottom: 1rem;
 }
-.chart-rule { height: 1px; background: var(--black); margin-bottom: 1.25rem; }
+.chart-rule { height: 1px; background: var(--black); margin: 0 0 14px; }
 
 .two-col {
   display: grid;
@@ -226,8 +248,11 @@ select:focus { outline: 2px solid var(--orange); outline-offset: 0; }
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 11px;
-  font-weight: 600;
+  font-family: var(--font-primary);
+  font-weight: 700;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   color: var(--text2);
 }
 .leg-dot {
@@ -241,20 +266,22 @@ select:focus { outline: 2px solid var(--orange); outline-offset: 0; }
 }
 
 /* ── Borough bars ── */
-.boro-list { display: flex; flex-direction: column; gap: 12px; }
-.boro-name { font-size: 12px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
-.boro-nums { font-size: 11px; color: var(--text2); float: right; margin-bottom: 4px; }
-.boro-bar-bg { height: 8px; background: var(--cloud); }
+.boro-list { display: flex; flex-direction: column; gap: 14px; }
+.boro-bar-bg { height: 10px; background: #f0f0f0; }
 .boro-bar-fill { height: 100%; transition: width 0.4s; }
 
 /* ── Source ── */
 .source {
+  font-family: var(--font-primary);
+  font-weight: 200;
   font-size: 11px;
-  color: var(--text3);
+  color: var(--text2);
   padding-top: 1.5rem;
-  border-top: 1px solid var(--border);
-  margin-top: 1rem;
+  border-top: 1px solid var(--black);
+  margin-top: 2rem;
+  line-height: 1.6;
 }
+.source strong { font-weight: 700; color: var(--text); }
 
 /* ── States ── */
 .state-screen {
@@ -296,9 +323,9 @@ select:focus { outline: 2px solid var(--orange); outline-offset: 0; }
 
 <div class="masthead">
   <div>
-    <div class="mast-vc">Vital City</div>
+    <div class="mast-vc">Vital City &nbsp;·&nbsp; Public safety data</div>
     <div class="mast-title">NYC crime complaints</div>
-    <div class="mast-sub">Year to date &nbsp;·&nbsp; NYPD complaint data &nbsp;·&nbsp; NYC Open Data</div>
+    <div class="mast-sub">Year-to-date counts of NYPD complaint reports, citywide and for the subway and public housing systems, back to 2006.</div>
   </div>
   <div class="mast-badge" id="meta-badge">Loading…</div>
 </div>
@@ -313,8 +340,10 @@ select:focus { outline: 2px solid var(--orange); outline-offset: 0; }
 
 <script>
 // ── Colors ────────────────────────────────────────────────────────────────────
-const C_CUR     = "#ff7c53";   // orange — current year
+const C_CUR     = "#e7466d";   // magenta — primary/current year
 const C_CMP     = "#c8c8c8";   // cloud gray — comparison year
+const C_PRIMARY = "#e7466d";   // alias
+const C_COMPARE = "#394882";   // indigo — highlighted comparison
 const C_TREND   = "#050507";   // black line for trend
 const C_GRID    = "rgba(5,5,7,0.06)";
 const C_AXIS    = "rgba(5,5,7,0.15)";
@@ -465,7 +494,7 @@ function buildApp() {
       </div>
     </div>
 
-    <div class="source">Source: NYPD Complaint Data (NYC Open Data). Combined categories defined by Vital City. Data updated quarterly.</div>
+    <div class="source"><strong>Source:</strong> NYPD Complaint Data (Historic and Year-to-Date), via NYC Open Data. Combined categories defined by Vital City. Subway counts reflect complaints by NYPD transit bureau; public housing counts reflect NYCHA developments. Data updated quarterly.</div>
   `;
 
   document.getElementById("sel-crime").addEventListener("change", e=>{state.crime=e.target.value;render();});
