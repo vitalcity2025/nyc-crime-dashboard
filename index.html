@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- saved from url=(0045)file:///C:/Users/paulr/Downloads/index_5.html -->
+<!-- saved from url=(0045)file:///C:/Users/paulr/Downloads/index_6.html -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -264,6 +264,24 @@ select:focus { outline: 2px solid var(--orange); outline-offset: 0; }
   .masthead { padding: 1.25rem; }
   .page { padding: 1.5rem 1.25rem 4rem; }
 }
+
+/* ── Tooltip ── */
+.tooltip {
+  position: absolute;
+  pointer-events: none;
+  background: var(--black);
+  color: var(--white);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.6;
+  padding: 8px 12px;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 0.1s;
+  z-index: 10;
+  border-left: 3px solid var(--orange);
+}
+.tooltip.visible { opacity: 1; }
 </style>
 </head>
 <body>
@@ -376,13 +394,38 @@ function buildApp() {
 
     <div class="metrics" id="metrics-row"></div>
 
+    <div class="two-col-equal">
+      <div class="chart-section">
+        <div class="chart-rule"></div>
+        <div class="chart-title">Quarter by quarter</div>
+        <div class="chart-sub" id="qtr-sub"></div>
+        <div class="legend" id="qtr-legend"></div>
+        <div style="position:relative;">
+          <canvas id="chart-qtr" style="width:100%;height:200px;display:block;"></canvas>
+          <div id="tt-qtr" class="tooltip"></div>
+        </div>
+      </div>
+      <div class="chart-section">
+        <div class="chart-rule"></div>
+        <div class="chart-title">Long-term trend — since 2006</div>
+        <div class="chart-sub" id="trend-sub"></div>
+        <div style="position:relative;">
+          <canvas id="chart-trend" style="width:100%;height:200px;display:block;"></canvas>
+          <div id="tt-trend" class="tooltip"></div>
+        </div>
+      </div>
+    </div>
+
     <div class="two-col">
       <div class="chart-section">
         <div class="chart-rule"></div>
         <div class="chart-title">Monthly complaints — YTD</div>
         <div class="chart-sub" id="monthly-sub"></div>
         <div class="legend" id="monthly-legend"></div>
-        <canvas id="chart-monthly" style="width:100%;height:220px;display:block;"></canvas>
+        <div style="position:relative;">
+          <canvas id="chart-monthly" style="width:100%;height:220px;display:block;"></canvas>
+          <div id="tt-monthly" class="tooltip"></div>
+        </div>
       </div>
       <div class="chart-section">
         <div class="chart-rule"></div>
@@ -390,22 +433,6 @@ function buildApp() {
         <div class="chart-sub" id="boro-sub"></div>
         <div class="legend" id="boro-legend"></div>
         <div class="boro-list" id="boro-list"></div>
-      </div>
-    </div>
-
-    <div class="two-col-equal">
-      <div class="chart-section">
-        <div class="chart-rule"></div>
-        <div class="chart-title">Quarter by quarter</div>
-        <div class="chart-sub" id="qtr-sub"></div>
-        <div class="legend" id="qtr-legend"></div>
-        <canvas id="chart-qtr" style="width:100%;height:200px;display:block;"></canvas>
-      </div>
-      <div class="chart-section">
-        <div class="chart-rule"></div>
-        <div class="chart-title">Long-term trend — since 2006</div>
-        <div class="chart-sub" id="trend-sub"></div>
-        <canvas id="chart-trend" style="width:100%;height:200px;display:block;"></canvas>
       </div>
     </div>
 
@@ -462,7 +489,7 @@ function render() {
   drawBars("chart-monthly", mnths.slice(0,maxMonth), [
     {label:String(cmpYear), data:monthly(cmpYear), color:C_CMP},
     {label:String(curYear), data:monthly(curYear), color:C_CUR},
-  ]);
+  ], "tt-monthly");
 
   // Borough bars
   const boroData=["Bronx","Brooklyn","Manhattan","Queens","Staten Island"]
@@ -494,17 +521,17 @@ function render() {
   drawBars("chart-qtr", qLabels, [
     {label:String(cmpYear), data:qLabels.map(q=>getCount(crime,loc,boro,cmpYear,q)), color:C_CMP},
     {label:String(curYear), data:qLabels.map(q=>getCount(crime,loc,boro,curYear,q)), color:C_CUR},
-  ]);
+  ], "tt-qtr");
 
   // Trend line
   const allYears=getAllYears();
   document.getElementById("trend-sub").textContent=`Each year = YTD through ${curQ} · 2006–${allYears[allYears.length-1]}`;
-  drawLine("chart-trend", allYears.map(String), allYears.map(y=>getYTD(crime,loc,boro,y,curQ)), String(curYear), cmpYear);
+  drawLine("chart-trend", allYears.map(String), allYears.map(y=>getYTD(crime,loc,boro,y,curQ)), String(curYear), cmpYear, "tt-trend");
 }
 
 // ── Canvas renderers ──────────────────────────────────────────────────────────
 function getCanvas(id, h) {
-  let c = document.getElementById(id);
+  const c = document.getElementById(id);
   const W = c.parentElement.clientWidth || 500;
   const H = h || 220;
   c.width = W * devicePixelRatio;
@@ -516,7 +543,29 @@ function getCanvas(id, h) {
   return {ctx, W, H};
 }
 
-function drawBars(id, labels, datasets) {
+function showTooltip(ttId, canvas, mouseX, mouseY, lines) {
+  const tt = document.getElementById(ttId);
+  if (!tt || !lines) { if(tt) tt.classList.remove("visible"); return; }
+  tt.innerHTML = lines.join("<br>");
+  tt.classList.add("visible");
+  const cW = canvas.clientWidth, cH = canvas.clientHeight;
+  const ttW = tt.offsetWidth || 160;
+  const ttH = tt.offsetHeight || 60;
+  let left = mouseX + 14;
+  let top  = mouseY - ttH / 2;
+  if (left + ttW > cW - 8) left = mouseX - ttW - 14;
+  if (top < 4) top = 4;
+  if (top + ttH > cH - 4) top = cH - ttH - 4;
+  tt.style.left = left + "px";
+  tt.style.top  = top + "px";
+}
+
+function hideTooltip(ttId) {
+  const tt = document.getElementById(ttId);
+  if (tt) tt.classList.remove("visible");
+}
+
+function drawBars(id, labels, datasets, ttId) {
   const {ctx, W, H} = getCanvas(id, 220);
   const PL=44, PR=8, PT=10, PB=28;
   const cW=W-PL-PR, cH=H-PT-PB;
@@ -524,45 +573,66 @@ function drawBars(id, labels, datasets) {
   const mx=Math.max(...allV,1);
   const niceMax=Math.ceil(mx/1000)*1000||1;
   const TICKS=4;
-
-  ctx.clearRect(0,0,W,H);
-
-  // Grid + y labels
-  for(let i=0;i<=TICKS;i++){
-    const v=(niceMax/TICKS)*i;
-    const y=PT+cH-(v/niceMax)*cH;
-    ctx.strokeStyle=C_GRID; ctx.lineWidth=1;
-    ctx.beginPath(); ctx.moveTo(PL,y); ctx.lineTo(PL+cW,y); ctx.stroke();
-    ctx.fillStyle=C_LABEL; ctx.font="10px -apple-system,sans-serif";
-    ctx.textAlign="right"; ctx.fillText(fmtK(Math.round(v)),PL-5,y+3.5);
-  }
-
-  // Bars
   const n=labels.length, ds=datasets.length;
   const groupW=cW/n;
   const barW=Math.min((groupW*0.75)/ds, 36);
   const gapX=(groupW-barW*ds)/2;
 
-  datasets.forEach((d,di)=>{
-    ctx.fillStyle=d.color;
-    d.data.forEach((v,i)=>{
-      const bH=(v/niceMax)*cH;
-      const x=PL+i*groupW+gapX+di*barW;
-      ctx.fillRect(x, PT+cH-bH, barW-1, bH);
+  function paint(hovIdx) {
+    ctx.clearRect(0,0,W,H);
+    // Grid + y labels
+    for(let i=0;i<=TICKS;i++){
+      const v=(niceMax/TICKS)*i, y=PT+cH-(v/niceMax)*cH;
+      ctx.strokeStyle=C_GRID; ctx.lineWidth=1;
+      ctx.beginPath(); ctx.moveTo(PL,y); ctx.lineTo(PL+cW,y); ctx.stroke();
+      ctx.fillStyle=C_LABEL; ctx.font="10px -apple-system,sans-serif";
+      ctx.textAlign="right"; ctx.fillText(fmtK(Math.round(v)),PL-5,y+3.5);
+    }
+    // Hover column highlight
+    if (hovIdx >= 0) {
+      ctx.fillStyle="rgba(5,5,7,0.04)";
+      ctx.fillRect(PL+hovIdx*groupW, PT, groupW, cH);
+    }
+    // Bars
+    datasets.forEach((d,di)=>{
+      d.data.forEach((v,i)=>{
+        const bH=(v/niceMax)*cH;
+        const x=PL+i*groupW+gapX+di*barW;
+        ctx.fillStyle = (hovIdx===i) ? d.color : d.color + "cc";
+        ctx.fillRect(x, PT+cH-bH, barW-1, bH);
+      });
     });
-  });
+    // X labels
+    ctx.fillStyle=C_LABEL; ctx.textAlign="center"; ctx.font="10px -apple-system,sans-serif";
+    labels.forEach((lbl,i)=>{ ctx.fillText(lbl, PL+i*groupW+groupW/2, H-6); });
+    // Axis
+    ctx.strokeStyle=C_AXIS; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(PL,PT+cH); ctx.lineTo(PL+cW,PT+cH); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(PL,PT); ctx.lineTo(PL,PT+cH); ctx.stroke();
+  }
 
-  // X labels
-  ctx.fillStyle=C_LABEL; ctx.textAlign="center"; ctx.font="10px -apple-system,sans-serif";
-  labels.forEach((lbl,i)=>{ ctx.fillText(lbl, PL+i*groupW+groupW/2, H-6); });
+  paint(-1);
 
-  // Axis
-  ctx.strokeStyle=C_AXIS; ctx.lineWidth=1;
-  ctx.beginPath(); ctx.moveTo(PL,PT+cH); ctx.lineTo(PL+cW,PT+cH); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(PL,PT); ctx.lineTo(PL,PT+cH); ctx.stroke();
+  const canvas = document.getElementById(id);
+  canvas.onmousemove = (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    const i = Math.floor((mx - PL) / groupW);
+    if (i >= 0 && i < n) {
+      paint(i);
+      const lines = [`<strong>${labels[i]}</strong>`,
+        ...datasets.map(d => `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${d.color};margin-right:5px;"></span>${d.label}: ${d.data[i].toLocaleString()}`)
+      ];
+      showTooltip(ttId, canvas, mx, my, lines);
+    } else {
+      paint(-1); hideTooltip(ttId);
+    }
+  };
+  canvas.onmouseleave = () => { paint(-1); hideTooltip(ttId); };
 }
 
-function drawLine(id, labels, data, curYear, cmpYear) {
+function drawLine(id, labels, data, curYear, cmpYear, ttId) {
   const {ctx, W, H} = getCanvas(id, 200);
   const PL=44, PR=8, PT=10, PB=28;
   const cW=W-PL-PR, cH=H-PT-PB;
@@ -575,46 +645,70 @@ function drawLine(id, labels, data, curYear, cmpYear) {
   function px(i){return PL+i*step;}
   function py(v){return PT+cH-(v/niceMax)*cH;}
 
-  ctx.clearRect(0,0,W,H);
-
-  // Grid + y labels
-  for(let i=0;i<=TICKS;i++){
-    const v=(niceMax/TICKS)*i, y=PT+cH-(v/niceMax)*cH;
-    ctx.strokeStyle=C_GRID; ctx.lineWidth=1;
-    ctx.beginPath(); ctx.moveTo(PL,y); ctx.lineTo(PL+cW,y); ctx.stroke();
-    ctx.fillStyle=C_LABEL; ctx.font="10px -apple-system,sans-serif";
-    ctx.textAlign="right"; ctx.fillText(fmtK(Math.round(v)),PL-5,y+3.5);
+  function paint(hovIdx) {
+    ctx.clearRect(0,0,W,H);
+    // Grid + y labels
+    for(let i=0;i<=TICKS;i++){
+      const v=(niceMax/TICKS)*i, y=PT+cH-(v/niceMax)*cH;
+      ctx.strokeStyle=C_GRID; ctx.lineWidth=1;
+      ctx.beginPath(); ctx.moveTo(PL,y); ctx.lineTo(PL+cW,y); ctx.stroke();
+      ctx.fillStyle=C_LABEL; ctx.font="10px -apple-system,sans-serif";
+      ctx.textAlign="right"; ctx.fillText(fmtK(Math.round(v)),PL-5,y+3.5);
+    }
+    // Vertical hover line
+    if (hovIdx >= 0) {
+      ctx.strokeStyle="rgba(5,5,7,0.15)"; ctx.lineWidth=1; ctx.setLineDash([3,3]);
+      ctx.beginPath(); ctx.moveTo(px(hovIdx),PT); ctx.lineTo(px(hovIdx),PT+cH); ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    // Line
+    ctx.beginPath(); ctx.strokeStyle=C_TREND; ctx.lineWidth=2;
+    data.forEach((v,i)=>{ i===0?ctx.moveTo(px(i),py(v)):ctx.lineTo(px(i),py(v)); });
+    ctx.stroke();
+    // Points
+    data.forEach((v,i)=>{
+      const lbl=labels[i];
+      const isCur=lbl===String(curYear), isCmp=lbl===String(cmpYear), isHov=i===hovIdx;
+      const r=isHov?6:(isCur||isCmp)?5:2.5;
+      const col=isHov?"#050507":isCur?C_CUR:isCmp?"#394882":"rgba(5,5,7,0.25)";
+      ctx.beginPath(); ctx.arc(px(i),py(v),r,0,Math.PI*2);
+      ctx.fillStyle=col; ctx.fill();
+      if((isCur||isCmp) && !isHov){
+        ctx.fillStyle=col; ctx.font="bold 10px -apple-system,sans-serif";
+        ctx.textAlign="center"; ctx.fillText(lbl,px(i),py(v)-10);
+      }
+    });
+    // X labels
+    ctx.fillStyle=C_LABEL; ctx.textAlign="center"; ctx.font="10px -apple-system,sans-serif";
+    const every=Math.ceil(n/8);
+    labels.forEach((lbl,i)=>{ if(i%every===0||i===n-1) ctx.fillText(lbl,px(i),H-6); });
+    // Axis
+    ctx.strokeStyle=C_AXIS; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(PL,PT+cH); ctx.lineTo(PL+cW,PT+cH); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(PL,PT); ctx.lineTo(PL,PT+cH); ctx.stroke();
   }
 
-  // Line
-  ctx.beginPath(); ctx.strokeStyle=C_TREND; ctx.lineWidth=2;
-  data.forEach((v,i)=>{ i===0?ctx.moveTo(px(i),py(v)):ctx.lineTo(px(i),py(v)); });
-  ctx.stroke();
+  paint(-1);
 
-  // Points — highlight current and comparison year
-  data.forEach((v,i)=>{
-    const lbl=labels[i];
-    const isCur=lbl===String(curYear), isCmp=lbl===String(cmpYear);
-    const r=(isCur||isCmp)?5:2.5;
-    const col=isCur?C_CUR:isCmp?"#394882":"rgba(5,5,7,0.25)";
-    ctx.beginPath(); ctx.arc(px(i),py(v),r,0,Math.PI*2);
-    ctx.fillStyle=col; ctx.fill();
-    if(isCur||isCmp){
-      // Year label above point
-      ctx.fillStyle=col; ctx.font="bold 10px -apple-system,sans-serif";
-      ctx.textAlign="center"; ctx.fillText(lbl,px(i),py(v)-9);
+  const canvas = document.getElementById(id);
+  canvas.onmousemove = (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    const i = Math.round((mx - PL) / step);
+    if (i >= 0 && i < n) {
+      paint(i);
+      const lbl = labels[i];
+      const col = lbl===String(curYear)?C_CUR:lbl===String(cmpYear)?"#394882":"#050507";
+      showTooltip(ttId, canvas, mx, my, [
+        `<strong style="color:${col}">${lbl}</strong>`,
+        `${data[i].toLocaleString()} complaints (Q1–${META.current_quarter})`
+      ]);
+    } else {
+      paint(-1); hideTooltip(ttId);
     }
-  });
-
-  // X labels (sparse)
-  ctx.fillStyle=C_LABEL; ctx.textAlign="center"; ctx.font="10px -apple-system,sans-serif";
-  const every=Math.ceil(n/8);
-  labels.forEach((lbl,i)=>{ if(i%every===0||i===n-1) ctx.fillText(lbl,px(i),H-6); });
-
-  // Axis
-  ctx.strokeStyle=C_AXIS; ctx.lineWidth=1;
-  ctx.beginPath(); ctx.moveTo(PL,PT+cH); ctx.lineTo(PL+cW,PT+cH); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(PL,PT); ctx.lineTo(PL,PT+cH); ctx.stroke();
+  };
+  canvas.onmouseleave = () => { paint(-1); hideTooltip(ttId); };
 }
 
 // ── Boot ─────────────────────────────────────────────────────────────────────
