@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- saved from url=(0046)file:///C:/Users/paulr/Downloads/index_14.html -->
+<!-- saved from url=(0046)file:///C:/Users/paulr/Downloads/index_15.html -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -394,7 +394,7 @@ function buildApp() {
 
   const groupOpts = META.crime_groups.map(g=>`<option value="${g}">— ${g} —</option>`).join("");
   // Major seven always shown in their own group
-  const MAJOR_SEVEN = ["FELONY ASSAULT","ROBBERY","BURGLARY","GRAND LARCENY","GRAND LARCENY OF MOTOR VEHICLE","RAPE","MURDER & NON-NEGL. MANSLAUGHTER"];
+  const MAJOR_SEVEN = ["MURDER & NON-NEGL. MANSLAUGHTER","RAPE","ROBBERY","FELONY ASSAULT","BURGLARY","GRAND LARCENY","GRAND LARCENY OF MOTOR VEHICLE"];
   const majorSet = new Set(MAJOR_SEVEN);
   // Only show majors that actually exist in the data
   const availableMajors = MAJOR_SEVEN.filter(c => META.crime_types.includes(c) || (META.crime_types_major||[]).includes(c));
