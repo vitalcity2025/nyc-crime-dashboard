@@ -11,7 +11,7 @@ library(jsonlite)
 
 # !! PASTE YOUR FREE APP TOKEN BETWEEN THE QUOTES BELOW !!
 # Get one at: data.cityofnewyork.us -> Sign In -> Developer Settings -> Create New App Token
-APP_TOKEN <- "mZeFN6PCQxcUIyWvdkc5BujGw"
+APP_TOKEN <- ""
 
 HISTORIC_ENDPOINT <- "https://data.cityofnewyork.us/resource/qgea-i56i.json"
 YTD_ENDPOINT      <- "https://data.cityofnewyork.us/resource/5uac-w243.json"
@@ -105,23 +105,23 @@ socrata_query_all <- function(endpoint, soql, page_size = 50000) {
 build_soql <- function(year, ytd_month_end) {
   loc_expr <- paste0(
     "CASE ",
-    "WHEN upper(prem_typ_desc) LIKE '%TRANSIT%' OR upper(prem_typ_desc) LIKE '%SUBWAY%' THEN 'subway' ",
-    "WHEN upper(prem_typ_desc) LIKE '%NYCHA%' OR upper(prem_typ_desc) LIKE '%PUBLIC HOUSING%' THEN 'housing' ",
+    "WHEN jurisdiction_code = 1 THEN 'subway' ",
+    "WHEN jurisdiction_code = 2 THEN 'housing' ",
     "ELSE 'other' END"
   )
   q_expr <- paste0(
     "CASE ",
-    "WHEN date_extract_m(cmplnt_fr_dt) <= 3 THEN 'Q1' ",
-    "WHEN date_extract_m(cmplnt_fr_dt) <= 6 THEN 'Q2' ",
-    "WHEN date_extract_m(cmplnt_fr_dt) <= 9 THEN 'Q3' ",
+    "WHEN date_extract_m(rpt_dt) <= 3 THEN 'Q1' ",
+    "WHEN date_extract_m(rpt_dt) <= 6 THEN 'Q2' ",
+    "WHEN date_extract_m(rpt_dt) <= 9 THEN 'Q3' ",
     "ELSE 'Q4' END"
   )
   sprintf(
-    "SELECT date_extract_y(cmplnt_fr_dt) AS yr, %s AS quarter,
+    "SELECT date_extract_y(rpt_dt) AS yr, %s AS quarter,
             ofns_desc, patrol_boro, %s AS loc_type, COUNT(*) AS n
-     WHERE  cmplnt_fr_dt >= '%d-01-01T00:00:00'
-       AND  cmplnt_fr_dt <  '%d-01-01T00:00:00'
-       AND  date_extract_m(cmplnt_fr_dt) <= %d
+     WHERE  rpt_dt >= '%d-01-01T00:00:00'
+       AND  rpt_dt <  '%d-01-01T00:00:00'
+       AND  date_extract_m(rpt_dt) <= %d
        AND  ofns_desc IS NOT NULL
      GROUP BY yr, quarter, ofns_desc, patrol_boro, loc_type",
     q_expr, loc_expr,
@@ -209,9 +209,9 @@ all_crime_types <- sort(crimes_over_100)
 
 # The 7 major individual crimes — always shown even if under threshold
 MAJOR_SEVEN <- c(
-  "FELONY ASSAULT", "ROBBERY", "BURGLARY",
-  "GRAND LARCENY", "GRAND LARCENY OF MOTOR VEHICLE",
-  "RAPE", "MURDER & NON-NEGL. MANSLAUGHTER"
+  "MURDER & NON-NEGL. MANSLAUGHTER", "RAPE", "ROBBERY",
+  "FELONY ASSAULT", "BURGLARY",
+  "GRAND LARCENY", "GRAND LARCENY OF MOTOR VEHICLE"
 )
 
 # Sorted dropdown: major 7 first, then rest alphabetically
@@ -261,6 +261,83 @@ if (length(group_rows) > 0) agg <- rbind(agg, do.call(rbind, group_rows))
 
 all_crime_types <- all_crime_types_ordered
 
+# ── Fetch MTA subway ridership ───────────────────────────────────────────────
+cat("
+Fetching MTA subway ridership...
+")
+
+mta_resp <- tryCatch({
+  GET("https://data.ny.gov/resource/xfre-bxip.json",
+      query = list(`$query` = "SELECT month, ridership WHERE agency = 'Subway' ORDER BY month ASC LIMIT 5000"),
+      timeout(60))
+}, error = function(e) { cat(sprintf("  WARNING: Could not fetch MTA ridership: %s
+", e$message)); NULL })
+
+subway_ridership <- list()
+
+if (!is.null(mta_resp) && !http_error(mta_resp)) {
+  mta_data <- fromJSON(content(mta_resp, "text", encoding = "UTF-8"), flatten = TRUE)
+  mta_data$yr  <- as.integer(substr(mta_data$month, 1, 4))
+  mta_data$mo  <- as.integer(substr(mta_data$month, 6, 7))
+  mta_data$ridership <- as.numeric(mta_data$ridership)
+  mta_data$quarter <- ifelse(mta_data$mo <= 3, "Q1",
+                      ifelse(mta_data$mo <= 6, "Q2",
+                      ifelse(mta_data$mo <= 9, "Q3", "Q4")))
+
+  # Aggregate to year + quarter totals
+  mta_qtr <- aggregate(ridership ~ yr + quarter, data = mta_data, FUN = sum)
+
+  # Build lookup: subway_ridership[[year]][[quarter]] = rides
+  for (i in seq_len(nrow(mta_qtr))) {
+    yr_key <- as.character(mta_qtr$yr[i])
+    qt_key <- mta_qtr$quarter[i]
+    if (is.null(subway_ridership[[yr_key]])) subway_ridership[[yr_key]] <- list()
+    subway_ridership[[yr_key]][[qt_key]] <- round(mta_qtr$ridership[i])
+  }
+
+  # Backfill 2006-2007 using 2008 quarterly averages
+  r2008 <- subway_ridership[["2008"]]
+  if (!is.null(r2008)) {
+    for (yr_back in c("2006", "2007")) {
+      subway_ridership[[yr_back]] <- r2008
+    }
+    cat(sprintf("  Backfilled 2006-2007 with 2008 baseline (%s rides/year)
+",
+                format(sum(unlist(r2008)), big.mark=",")))
+  }
+  cat(sprintf("  Ridership data loaded for %d years
+", length(subway_ridership)))
+} else {
+  cat("  WARNING: Using empty ridership table — rate mode unavailable for subway
+")
+}
+
+# ── NYC + borough population estimates (Census ACS, per 100k) ────────────────
+# Annual estimates — update every few years with new ACS releases
+# Source: NYC Department of City Planning / Census Bureau
+NYC_POP <- list(
+  "2006"=list(nyc=8214426, Bronx=1364566, Brooklyn=2505040, Manhattan=1596843, Queens=2270338, `Staten Island`=472639),
+  "2007"=list(nyc=8274527, Bronx=1384115, Brooklyn=2528799, Manhattan=1604776, Queens=2285116, `Staten Island`=471721),
+  "2008"=list(nyc=8333346, Bronx=1397751, Brooklyn=2551026, Manhattan=1621279, Queens=2290514, `Staten Island`=472776),
+  "2009"=list(nyc=8391881, Bronx=1410657, Brooklyn=2572671, Manhattan=1634877, Queens=2303200, `Staten Island`=470476),
+  "2010"=list(nyc=8175133, Bronx=1385108, Brooklyn=2504700, Manhattan=1585873, Queens=2230722, `Staten Island`=468730),
+  "2011"=list(nyc=8244910, Bronx=1398975, Brooklyn=2532645, Manhattan=1601948, Queens=2237644, `Staten Island`=473698),
+  "2012"=list(nyc=8336697, Bronx=1420695, Brooklyn=2565635, Manhattan=1619268, Queens=2253615, `Staten Island`=477484),
+  "2013"=list(nyc=8405837, Bronx=1432132, Brooklyn=2595259, Manhattan=1626159, Queens=2272771, `Staten Island`=479516),
+  "2014"=list(nyc=8491079, Bronx=1446788, Brooklyn=2629150, Manhattan=1636268, Queens=2296177, `Staten Island`=482696),
+  "2015"=list(nyc=8550405, Bronx=1455720, Brooklyn=2649049, Manhattan=1643734, Queens=2312476, `Staten Island`=476426),
+  "2016"=list(nyc=8537673, Bronx=1455919, Brooklyn=2641052, Manhattan=1644518, Queens=2321580, `Staten Island`=474604),
+  "2017"=list(nyc=8622698, Bronx=1471160, Brooklyn=2678884, Manhattan=1664727, Queens=2339150, `Staten Island`=476777),
+  "2018"=list(nyc=8398748, Bronx=1432132, Brooklyn=2600747, Manhattan=1628706, Queens=2278906, `Staten Island`=476253),
+  "2019"=list(nyc=8336817, Bronx=1418207, Brooklyn=2576771, Manhattan=1628701, Queens=2253858, `Staten Island`=475280),
+  "2020"=list(nyc=8804190, Bronx=1472654, Brooklyn=2736074, Manhattan=1694251, Queens=2405464, `Staten Island`=495747),
+  "2021"=list(nyc=8467513, Bronx=1379946, Brooklyn=2590516, Manhattan=1596273, Queens=2278029, `Staten Island`=422749),
+  "2022"=list(nyc=8335897, Bronx=1356476, Brooklyn=2561225, Manhattan=1597451, Queens=2278029, `Staten Island`=422716),
+  "2023"=list(nyc=8258035, Bronx=1336705, Brooklyn=2530151, Manhattan=1596909, Queens=2245398, `Staten Island`=418872),
+  "2024"=list(nyc=8258035, Bronx=1336705, Brooklyn=2530151, Manhattan=1596909, Queens=2245398, `Staten Island`=418872),
+  "2025"=list(nyc=8258035, Bronx=1336705, Brooklyn=2530151, Manhattan=1596909, Queens=2245398, `Staten Island`=418872)
+)
+
 # ── Build nested JSON structure ───────────────────────────────────────────────
 
 cat("Building JSON...\n")
@@ -285,6 +362,8 @@ output <- list(
   crime_types        = all_crime_types,
   crime_types_major  = major_in_list,
   crime_groups       = c("All crime", names(CRIME_GROUPS)),
+  subway_ridership   = subway_ridership,
+  population         = NYC_POP,
   data               = data_out
 )
 

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- saved from url=(0046)file:///C:/Users/paulr/Downloads/index_15.html -->
+<!-- saved from url=(0046)file:///C:/Users/paulr/Downloads/index_16.html -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -360,6 +360,53 @@ const BORO_COLORS = {
 const QUARTERS = ["Q1","Q2","Q3","Q4"];
 const BOROUGHS = ["All boroughs","Bronx","Brooklyn","Manhattan","Queens","Staten Island"];
 
+// ── Rate helpers ─────────────────────────────────────────────────────────────
+function getSubwayRidership(year, quarter) {
+  if (!META.subway_ridership) return null;
+  const yr = META.subway_ridership[String(year)];
+  if (!yr) return null;
+  return yr[quarter] || null;
+}
+function getSubwayRidershipYTD(year, upToQ) {
+  const qi = QUARTERS.indexOf(upToQ); let t = 0;
+  for (let i = 0; i <= qi; i++) {
+    const r = getSubwayRidership(year, QUARTERS[i]);
+    if (r == null) return null;
+    t += r;
+  }
+  return t;
+}
+function getPopulation(year, borough) {
+  if (!META.population) return null;
+  const yr = META.population[String(year)] || META.population["2025"];
+  if (!yr) return null;
+  if (borough === "All boroughs") return yr.nyc || null;
+  return yr[borough] || null;
+}
+// Convert raw count to rate based on loc + borough
+function toRate(count, loc, borough, year, quarter, upToQ) {
+  if (count == null || count === 0) return 0;
+  if (loc === "subway") {
+    const rides = upToQ
+      ? getSubwayRidershipYTD(year, upToQ)
+      : getSubwayRidership(year, quarter);
+    if (!rides) return null;
+    return (count / rides) * 1000000; // per million rides
+  } else {
+    const pop = getPopulation(year, borough);
+    if (!pop) return null;
+    return (count / pop) * 100000; // per 100k residents
+  }
+}
+function fmtRate(v, loc) {
+  if (v == null || isNaN(v)) return "—";
+  const r = Math.round(v * 10) / 10;
+  return r.toLocaleString(undefined, {minimumFractionDigits:1, maximumFractionDigits:1});
+}
+function rateLabel(loc) {
+  return loc === "subway" ? "per million rides" : "per 100k residents";
+}
+
 function fmt(n) { if (n==null||isNaN(n)) return "—"; return Math.round(n).toLocaleString(); }
 function fmtK(v) { return v>=1000?(v/1000).toFixed(0)+"k":String(v); }
 function deltaDisplay(curr, prev) {
@@ -440,6 +487,13 @@ function buildApp() {
       <div class="ctrl">
         <label>Compare to</label>
         <select id="sel-cmp" style="min-width:100px;">${cmpOpts}</select>
+      </div>
+      <div class="ctrl" id="rate-ctrl">
+        <label>View</label>
+        <div class="toggle-group" id="rate-toggle">
+          <button data-rate="count" class="active">Count</button>
+          <button data-rate="rate">Rate</button>
+        </div>
       </div>
     </div>
 
@@ -522,11 +576,17 @@ function buildApp() {
     document.querySelectorAll("#trend-toggle button").forEach(b=>b.classList.remove("active"));
     btn.classList.add("active"); state.trendMode=btn.dataset.trend; render();
   });
+  document.getElementById("rate-toggle").addEventListener("click", e=>{
+    const btn=e.target.closest("button"); if(!btn) return;
+    document.querySelectorAll("#rate-toggle button").forEach(b=>b.classList.remove("active"));
+    btn.classList.add("active"); state.rateMode=btn.dataset.rate; render();
+  });
 
   state.crime       = META.crime_groups[0];
   state.primaryYear = String(META.current_year);
   state.cmpYear     = String(META.current_year-1);
   state.trendMode   = "ytd";
+  state.rateMode    = "count";
   document.getElementById("sel-crime").value   = state.crime;
   document.getElementById("sel-primary").value = state.primaryYear;
 }
@@ -545,17 +605,42 @@ function render() {
   const primaryQIdx = QUARTERS.indexOf(primaryQ);
 
   // Metrics — YTD + all 4 quarters
+  const isRate = state.rateMode === "rate" && loc !== "housing";
+  const rCtrl = document.getElementById("rate-ctrl");
+  if (rCtrl) rCtrl.style.display = loc === "housing" ? "none" : "";
+
   const pYTD=getYTD(crime,loc,boro,primaryYear,primaryQ);
   const cYTD=getYTD(crime,loc,boro,cmpYear,primaryQ);
-  const ytdMetric = {label:`YTD total (${primaryYear})`, val:fmt(pYTD), delta:deltaDisplay(pYTD,cYTD), isYTD:true};
+
+  // Convert to rates if needed
+  function displayVal(count, year, q, upToQ) {
+    if (!isRate) return fmt(count);
+    const r = toRate(count, loc, boro, year, q, upToQ);
+    return r == null ? "n/a" : fmtRate(r, loc);
+  }
+  function displayDelta(pCount, cCount, year, q, upToQ) {
+    if (!isRate) return deltaDisplay(pCount, cCount);
+    const pR = toRate(pCount, loc, boro, year, q, upToQ);
+    const cR = toRate(cCount, loc, boro, year, q, upToQ);
+    if (pR == null || cR == null) return {text:"Rate unavailable", cls:"delta-flat"};
+    return deltaDisplay(pR, cR);
+  }
+
+  const ytdLabel = isRate ? `YTD ${primaryYear} · ${rateLabel(loc)}` : `YTD total (${primaryYear})`;
+  const ytdMetric = {
+    label: ytdLabel,
+    val: displayVal(pYTD, primaryYear, null, primaryQ),
+    delta: displayDelta(pYTD, cYTD, primaryYear, null, primaryQ),
+    isYTD:true
+  };
   const qtrMetrics = QUARTERS.map(q=>{
     const pVal=getCount(crime,loc,boro,primaryYear,q);
     const cVal=getCount(crime,loc,boro,cmpYear,q);
     const available = QUARTERS.indexOf(q)<=primaryQIdx;
     return {
       label:`${q} ${primaryYear}`,
-      val: available?fmt(pVal):"—",
-      delta: available?deltaDisplay(pVal,cVal):{text:"Not yet available",cls:"delta-flat"},
+      val: available ? displayVal(pVal, primaryYear, q, null) : "—",
+      delta: available ? displayDelta(pVal, cVal, primaryYear, q, null) : {text:"Not yet available",cls:"delta-flat"},
       isYTD:false
     };
   });
@@ -626,8 +711,12 @@ function render() {
   const allYrs=Array.from({length:maxYr-minYr+1},(_,i)=>minYr+i);
 
   if(trendMode==="ytd"){
-    const tData=allYrs.map(y=>getYTD(crime,loc,boro,y,curQ));
-    document.getElementById("trend-sub").textContent=`YTD through ${curQ} each year · ${minYr}–${maxYr}`;
+    const rawData=allYrs.map(y=>getYTD(crime,loc,boro,y,curQ));
+    const tData = isRate
+      ? rawData.map((v,i)=>{ const r=toRate(v,loc,boro,allYrs[i],null,curQ); return r==null?0:r; })
+      : rawData;
+    const subLabel = isRate ? ` · ${rateLabel(loc)}` : "";
+    document.getElementById("trend-sub").textContent=`YTD through ${curQ} each year · ${minYr}–${maxYr}${subLabel}`;
     drawLine("chart-trend", allYrs.map(String), tData, primaryYear, cmpYear, "tt-trend", null);
 
   } else if(trendMode==="quarterly"){
@@ -937,6 +1026,8 @@ async function boot() {
   META=raw.meta;
   META.crime_groups=raw.crime_groups||[];
   META.crime_types=raw.crime_types||[];
+  META.subway_ridership=raw.subway_ridership||{};
+  META.population=raw.population||{};
   DATA=raw.data;
   buildApp();
   render();
