@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- saved from url=(0046)file:///C:/Users/paulr/Downloads/index_33.html -->
+<!-- saved from url=(0046)file:///C:/Users/paulr/Downloads/index_34.html -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -758,7 +758,7 @@ function buildApp() {
         </div>
         <div class="legend" id="map-legend" style="align-self:center;"></div>
       </div>
-      <div id="map-container" style="width:100%;height:520px;position:relative;">
+      <div id="map-container" style="width:100%;height:clamp(400px,60vw,680px);position:relative;">
         <div id="map-loading" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--text2);">Loading map…</div>
         <canvas id="map-canvas" style="width:100%;height:100%;display:block;"></canvas>
         <div id="map-tooltip" class="tooltip"></div>
@@ -1379,8 +1379,8 @@ function renderMap() {
     const H = container.clientHeight;
     canvas.width = W * devicePixelRatio;
     canvas.height = H * devicePixelRatio;
-    canvas.style.width = W + "px";
-    canvas.style.height = H + "px";
+    canvas.style.width = "100%";
+    canvas.style.height = "100%";
     const ctx = canvas.getContext("2d");
     ctx.scale(devicePixelRatio, devicePixelRatio);
     ctx.clearRect(0, 0, W, H);
