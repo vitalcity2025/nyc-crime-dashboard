@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- saved from url=(0046)file:///C:/Users/paulr/Downloads/index_21.html -->
+<!-- saved from url=(0046)file:///C:/Users/paulr/Downloads/index_22.html -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -1200,17 +1200,9 @@ let GEO_DATA = null;
 
 async function loadGeoData() {
   if (GEO_DATA) return GEO_DATA;
-  // Try multiple known URLs for NYPD precinct boundaries
-  const GEO_URLS = [
-    "https://data.cityofnewyork.us/api/geospatial/y76i-bdw7?method=export&type=GeoJSON",
-    "https://data.cityofnewyork.us/resource/99qf-swyn.geojson?$limit=200",
-  ];
   try {
-    let resp, lastErr;
-    for (const url of GEO_URLS) {
-      try { resp = await fetch(url); if (resp.ok) break; } catch(e) { lastErr=e; }
-    }
-    if (!resp || !resp.ok) throw lastErr || new Error("GeoJSON fetch failed");
+    const resp = await fetch("precincts.geojson");
+    if (!resp.ok) throw new Error("precincts.geojson not found — make sure it is in the same folder as index.html");
     GEO_DATA = await resp.json();
     // Log first feature's property keys to help debug
     if (GEO_DATA.features && GEO_DATA.features.length > 0) {
@@ -1256,13 +1248,15 @@ function renderMap() {
     // Compute bounds of all precincts
     let minLng=Infinity, maxLng=-Infinity, minLat=Infinity, maxLat=-Infinity;
     geo.features.forEach(f => {
-      const coords = f.geometry.type === "Polygon"
+      // MultiPolygon: coordinates = [polygon][ring][point]
+      // Polygon: coordinates = [ring][point]
+      const polys = f.geometry.type === "MultiPolygon"
         ? f.geometry.coordinates
-        : f.geometry.coordinates.flat();
-      coords.forEach(ring => ring.forEach(([lng,lat]) => {
+        : [f.geometry.coordinates];
+      polys.forEach(poly => poly.forEach(ring => ring.forEach(([lng,lat]) => {
         if(lng<minLng) minLng=lng; if(lng>maxLng) maxLng=lng;
         if(lat<minLat) minLat=lat; if(lat>maxLat) maxLat=lat;
-      }));
+      })));
     });
 
     const PAD = 20;
@@ -1279,7 +1273,7 @@ function renderMap() {
     // Compute pct changes
     const pctChanges = {};
     geo.features.forEach(f => {
-      const pct = (() => { const props=f.properties; const r=props.precinct??props.Precinct??props.PRECINCT??props.pct??props.PCT??props.Precinct_Number??props.prec??null; return r?parseInt(r):0; })();
+      const pct = parseInt(f.properties.precinct || 0);
       if (!pct) return;
       const cur = getPctYTD(crime, pct, primaryYear, primaryQ);
       const prv = getPctYTD(crime, pct, cmpYear, primaryQ);
@@ -1309,21 +1303,20 @@ function renderMap() {
     // Draw precincts
     const featurePaths = [];
     geo.features.forEach(f => {
-      const pct = (() => { const props=f.properties; const r=props.precinct??props.Precinct??props.PRECINCT??props.pct??props.PCT??props.Precinct_Number??props.prec??null; return r?parseInt(r):0; })();
+      const pct = parseInt(f.properties.precinct || 0);
       const change = pctChanges[pct];
       const fillColor = change ? pctToColor(change.pct) : "#e8e6df";
 
       ctx.beginPath();
-      const rings = f.geometry.type === "Polygon"
-        ? f.geometry.coordinates
-        : f.geometry.coordinates.flat();
-      rings.forEach(ring => {
+      const polys = f.geometry.type === "MultiPolygon"
+        ? f.geometry.coordinates : [f.geometry.coordinates];
+      polys.forEach(poly => poly.forEach(ring => {
         ring.forEach(([lng,lat], i) => {
           const [x,y] = project([lng,lat]);
           i === 0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
         });
         ctx.closePath();
-      });
+      }));
       ctx.fillStyle = fillColor;
       ctx.fill();
       ctx.strokeStyle = "#ffffff";
@@ -1331,20 +1324,19 @@ function renderMap() {
       ctx.stroke();
 
       // Store for hit testing
-      featurePaths.push({ pct, change, rings });
+      featurePaths.push({ pct, change, geometry: f.geometry });
     });
 
     // Draw precinct labels for selected precinct
     if (state.precinct) {
       geo.features.forEach(f => {
-        const pct = (() => { const props=f.properties; const r=props.precinct??props.Precinct??props.PRECINCT??props.pct??props.PCT??props.Precinct_Number??props.prec??null; return r?parseInt(r):0; })();
+        const pct = parseInt(f.properties.precinct || 0);
         if (pct !== state.precinct) return;
-        const rings = f.geometry.type === "Polygon"
-          ? f.geometry.coordinates
-          : f.geometry.coordinates.flat();
-        // Find centroid
+        // Find centroid of first polygon's outer ring
+        const cPolys = f.geometry.type === "MultiPolygon"
+          ? f.geometry.coordinates : [f.geometry.coordinates];
         let sumX=0, sumY=0, count=0;
-        rings[0].forEach(([lng,lat]) => { const [x,y]=project([lng,lat]); sumX+=x; sumY+=y; count++; });
+        cPolys[0][0].forEach(([lng,lat]) => { const [x,y]=project([lng,lat]); sumX+=x; sumY+=y; count++; });
         ctx.fillStyle = "#050507";
         ctx.font = "bold 11px -apple-system,sans-serif";
         ctx.textAlign = "center";
@@ -1368,16 +1360,17 @@ function renderMap() {
 
     // Tooltip on hover
     function hitTest(mx, my) {
-      for (const {pct, change, rings} of featurePaths) {
-        // Simple point-in-polygon using canvas isPointInPath
+      for (const {pct, change, geometry} of featurePaths) {
         ctx.beginPath();
-        rings.forEach(ring => {
+        const hPolys = geometry.type === "MultiPolygon"
+          ? geometry.coordinates : [geometry.coordinates];
+        hPolys.forEach(poly => poly.forEach(ring => {
           ring.forEach(([lng,lat], i) => {
             const [x,y] = project([lng,lat]);
             i === 0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
           });
           ctx.closePath();
-        });
+        }));
         if (ctx.isPointInPath(mx * devicePixelRatio, my * devicePixelRatio)) {
           return { pct, change };
         }

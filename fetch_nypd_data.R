@@ -443,6 +443,21 @@ output <- list(
 out_path <- "crime_data.json"
 write(toJSON(output, auto_unbox = TRUE), out_path)
 
+# ── Download precinct boundaries GeoJSON ─────────────────────────────────────
+cat("\nDownloading precinct boundaries...\n")
+geo_resp <- tryCatch({
+  GET("https://raw.githubusercontent.com/ResidentMario/geoplot-data/master/nyc-police-precincts.geojson",
+      timeout(30))
+}, error = function(e) NULL)
+
+if (!is.null(geo_resp) && status_code(geo_resp) == 200) {
+  writeLines(content(geo_resp, "text", encoding = "UTF-8"), "precincts.geojson")
+  cat("  Saved precincts.geojson\n")
+} else {
+  cat("  WARNING: Could not download precincts.geojson — map will not work\n")
+  cat("  Manually save from: https://raw.githubusercontent.com/ResidentMario/geoplot-data/master/nyc-police-precincts.geojson\n")
+}
+
 size_kb <- round(file.size(out_path) / 1024)
 cat(sprintf("\nDone! Wrote %s (%d KB)\n", out_path, size_kb))
 cat(sprintf("  %d individual crime types\n", length(all_crime_types)))
