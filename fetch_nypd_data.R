@@ -265,51 +265,67 @@ all_crime_types <- all_crime_types_ordered
 # ── Precinct-level aggregation (citywide only for map) ───────────────────────
 cat("Building precinct aggregation...\n")
 
-# All complaints with a precinct number — subway and housing included
-rows_pct <- all_rows[!is.na(all_rows$precinct) & all_rows$precinct > 0, ]
-rows_pct$bucket <- "citywide"
+# Precinct aggregation — one per location type
+# loc_type values: "other" = citywide, "subway", "housing"
+build_pct_data <- function(rows_subset) {
+  if (nrow(rows_subset) == 0) return(list())
 
-# Aggregate individual crimes by precinct
-agg_pct <- aggregate(n ~ ofns_desc + bucket + precinct + yr + quarter,
-                     data = rows_pct, FUN = sum)
-# Use precinct as a string key "pct_NN"
-agg_pct$pct_key <- paste0("pct_", agg_pct$precinct)
+  rows_subset$pct_key <- paste0("pct_", rows_subset$precinct)
+  agg <- aggregate(n ~ ofns_desc + pct_key + yr + quarter,
+                   data = rows_subset, FUN = sum)
 
-# Add crime groups for precincts
-group_pct_rows <- list()
-for (gname in names(CRIME_GROUPS)) {
-  members <- CRIME_GROUPS[[gname]]
-  sub_p   <- agg_pct[agg_pct$ofns_desc %in% members, ]
-  if (nrow(sub_p) == 0) next
-  g_p <- aggregate(n ~ bucket + pct_key + yr + quarter, data = sub_p, FUN = sum)
-  g_p$ofns_desc <- gname
-  group_pct_rows[[gname]] <- g_p[, c("ofns_desc","bucket","pct_key","yr","quarter","n")]
+  # Crime groups
+  group_rows <- list()
+  for (gname in names(CRIME_GROUPS)) {
+    members <- CRIME_GROUPS[[gname]]
+    sub_p   <- agg[agg$ofns_desc %in% members, ]
+    if (nrow(sub_p) == 0) next
+    g_p <- aggregate(n ~ pct_key + yr + quarter, data = sub_p, FUN = sum)
+    g_p$ofns_desc <- gname
+    group_rows[[gname]] <- g_p[, c("ofns_desc","pct_key","yr","quarter","n")]
+  }
+  all_c <- aggregate(n ~ pct_key + yr + quarter, data = agg, FUN = sum)
+  all_c$ofns_desc <- "All crime"
+
+  final <- rbind(
+    agg[, c("ofns_desc","pct_key","yr","quarter","n")],
+    if (length(group_rows) > 0) do.call(rbind, group_rows) else NULL,
+    all_c[, c("ofns_desc","pct_key","yr","quarter","n")]
+  )
+
+  # Build nested list
+  out <- list()
+  for (i in seq_len(nrow(final))) {
+    cr <- final$ofns_desc[i]; pk <- final$pct_key[i]
+    yr <- final$yr[i];        qt <- final$quarter[i]
+    n  <- final$n[i]
+    if (is.null(out[[cr]]))             out[[cr]]             <- list()
+    if (is.null(out[[cr]][[pk]]))       out[[cr]][[pk]]       <- list()
+    if (is.null(out[[cr]][[pk]][[yr]])) out[[cr]][[pk]][[yr]] <- list()
+    out[[cr]][[pk]][[yr]][[qt]] <- n
+  }
+  out
 }
-# All crime for precincts
-all_crime_pct <- aggregate(n ~ bucket + pct_key + yr + quarter, data = agg_pct, FUN = sum)
-all_crime_pct$ofns_desc <- "All crime"
-agg_pct_final <- rbind(
-  agg_pct[, c("ofns_desc","bucket","pct_key","yr","quarter","n")],
-  if (length(group_pct_rows) > 0) do.call(rbind, group_pct_rows) else NULL,
-  all_crime_pct[, c("ofns_desc","bucket","pct_key","yr","quarter","n")]
+
+rows_with_pct <- all_rows[!is.na(all_rows$precinct) & all_rows$precinct > 0, ]
+
+cat("  Building citywide precinct data...\n")
+pct_citywide <- build_pct_data(rows_with_pct[rows_with_pct$loc_type == "other", ])
+cat(sprintf("    %d precincts\n", length(pct_citywide[["All crime"]])))
+
+cat("  Building subway precinct data...\n")
+pct_subway <- build_pct_data(rows_with_pct[rows_with_pct$loc_type == "subway", ])
+cat(sprintf("    %d precincts\n", length(pct_subway[["All crime"]])))
+
+cat("  Building housing precinct data...\n")
+pct_housing <- build_pct_data(rows_with_pct[rows_with_pct$loc_type == "housing", ])
+cat(sprintf("    %d precincts\n", length(pct_housing[["All crime"]])))
+
+pct_data_out <- list(
+  citywide = pct_citywide,
+  subway   = pct_subway,
+  housing  = pct_housing
 )
-
-# Build nested: pct_data[[crime]][[pct_key]][[year]][[quarter]] = n
-cat("  Building precinct JSON structure...\n")
-pct_data_out <- list()
-for (i in seq_len(nrow(agg_pct_final))) {
-  cr  <- agg_pct_final$ofns_desc[i]
-  pk  <- agg_pct_final$pct_key[i]
-  yr  <- agg_pct_final$yr[i]
-  qt  <- agg_pct_final$quarter[i]
-  n   <- agg_pct_final$n[i]
-  if (is.null(pct_data_out[[cr]]))             pct_data_out[[cr]]             <- list()
-  if (is.null(pct_data_out[[cr]][[pk]]))       pct_data_out[[cr]][[pk]]       <- list()
-  if (is.null(pct_data_out[[cr]][[pk]][[yr]])) pct_data_out[[cr]][[pk]][[yr]] <- list()
-  pct_data_out[[cr]][[pk]][[yr]][[qt]] <- n
-}
-cat(sprintf("  Precinct data built: %d precincts\n",
-            length(unique(agg_pct_final$pct_key))))
 
 # ── Subway ridership ─────────────────────────────────────────────────────────
 # Pre-2018: hardcoded annual totals from MTA official reports + NYU Wagner research
@@ -410,6 +426,25 @@ NYC_POP <- list(
   "2025"=list(nyc=8258035, Bronx=1336705, Brooklyn=2530151, Manhattan=1596909, Queens=2245398, `Staten Island`=418872)
 )
 
+# ── Download precinct population data (2020 Census, via John Keefe/WNYC) ─────
+cat("\nDownloading precinct population data...\n")
+pop_resp <- tryCatch({
+  GET("https://raw.githubusercontent.com/jkeefe/census-by-precincts/master/data/nyc/nyc_precinct_2020pop.csv",
+      timeout(30))
+}, error = function(e) NULL)
+
+precinct_population <- list()
+if (!is.null(pop_resp) && status_code(pop_resp) == 200) {
+  pop_csv <- read.csv(text = content(pop_resp, "text", encoding = "UTF-8"))
+  for (i in seq_len(nrow(pop_csv))) {
+    pct_key <- as.character(pop_csv$precinct[i])
+    precinct_population[[pct_key]] <- as.integer(pop_csv$P1_001N[i])
+  }
+  cat(sprintf("  Population data loaded for %d precincts\n", length(precinct_population)))
+} else {
+  cat("  WARNING: Could not download precinct population data\n")
+}
+
 # ── Build nested JSON structure ───────────────────────────────────────────────
 
 cat("Building JSON...\n")
@@ -437,7 +472,8 @@ output <- list(
   subway_ridership   = subway_ridership,
   population         = NYC_POP,
   data               = data_out,
-  pct_data           = pct_data_out
+  pct_data           = pct_data_out,
+  precinct_population = precinct_population
 )
 
 out_path <- "crime_data.json"

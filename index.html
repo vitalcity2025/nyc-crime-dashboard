@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- saved from url=(0046)file:///C:/Users/paulr/Downloads/index_37.html -->
+<!-- saved from url=(0046)file:///C:/Users/paulr/Downloads/index_38.html -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -533,12 +533,16 @@ function rateLabel(loc) {
   return loc === "subway" ? "per million rides" : "per 100k residents";
 }
 
-function getPctCount(crime, pct, year, quarter) {
-  try { const v=PCT_DATA[crime]?.[`pct_${pct}`]?.[String(year)]?.[quarter]; return v?parseInt(v):0; } catch{return 0;}
+function getPctCount(crime, pct, year, quarter, loc) {
+  try {
+    const slice = PCT_DATA[(loc==="subway"?"subway":loc==="housing"?"housing":"citywide")]||{};
+    const v = slice[crime]?.[`pct_${pct}`]?.[String(year)]?.[quarter];
+    return v ? parseInt(v) : 0;
+  } catch { return 0; }
 }
-function getPctYTD(crime, pct, year, upToQ) {
+function getPctYTD(crime, pct, year, upToQ, loc) {
   const qi=QUARTERS.indexOf(upToQ); let t=0;
-  for(let i=0;i<=qi;i++) t+=getPctCount(crime,pct,year,QUARTERS[i]);
+  for(let i=0;i<=qi;i++) t+=getPctCount(crime,pct,year,QUARTERS[i],loc);
   return t;
 }
 function fmt(n) { if (n==null||isNaN(n)) return "—"; return Math.round(n).toLocaleString(); }
@@ -552,8 +556,8 @@ function deltaDisplay(curr, prev, cmpYr) {
 }
 
 // ── State ────────────────────────────────────────────────────────────────────
-let DATA=null, META=null, PCT_DATA={};
-let state = { crime:null, loc:"citywide", borough:"All boroughs", precinct:null, cmpYear:null, primaryYear:null, trendMode:"ytd", subwayRate:false, boroRateMode:"count" };
+let DATA=null, META=null, PCT_DATA={}, PCT_POP={};
+let state = { crime:null, loc:"citywide", borough:"All boroughs", precinct:null, cmpYear:null, primaryYear:null, trendMode:"ytd", subwayRate:false, boroRateMode:"count", mapRateMode:"count" };
 
 function getCount(crime,loc,boro,year,q) {
   try { const v=DATA[crime]?.[loc]?.[boro]?.[String(year)]?.[q]; return v?parseInt(v):0; } catch{return 0;}
@@ -757,7 +761,15 @@ function buildApp() {
           <div class="chart-title">YTD change by precinct</div>
           <div class="chart-sub" id="map-sub"></div>
         </div>
-        <div class="legend" id="map-legend" style="align-self:center;"></div>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <div id="map-rate-ctrl" style="display:none;">
+            <div class="toggle-group" id="map-rate-toggle" style="height:26px;">
+              <button data-maprate="count" class="active" style="font-size:10px;padding:0 10px;">Count</button>
+              <button data-maprate="rate" style="font-size:10px;padding:0 10px;">Rate</button>
+            </div>
+          </div>
+          <div class="legend" id="map-legend" style="align-self:center;"></div>
+        </div>
       </div>
       <div id="map-container" style="width:100%;height:clamp(480px,75vw,820px);position:relative;">
         <div id="map-loading" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--text2);">Loading map…</div>
@@ -848,6 +860,11 @@ function buildApp() {
     document.querySelectorAll("#boro-rate-toggle button").forEach(b=>b.classList.remove("active"));
     btn.classList.add("active"); state.boroRateMode=btn.dataset.bororate; render();
   });
+  document.getElementById("map-rate-toggle").addEventListener("click", e=>{
+    const btn=e.target.closest("button"); if(!btn) return;
+    document.querySelectorAll("#map-rate-toggle button").forEach(b=>b.classList.remove("active"));
+    btn.classList.add("active"); state.mapRateMode=btn.dataset.maprate; render();
+  });
 
 
   state.crime       = META.crime_groups[0];
@@ -878,10 +895,10 @@ function render() {
   const pct = state.precinct;
   const inPctMode = !!(pct && loc === "citywide");
   function getC(cr, lc, bo, yr, q) {
-    return inPctMode ? getPctCount(cr, pct, yr, q) : getCount(cr, lc, bo, yr, q);
+    return inPctMode ? getPctCount(cr, pct, yr, q, lc) : getCount(cr, lc, bo, yr, q);
   }
   function getY(cr, lc, bo, yr, upToQ) {
-    return inPctMode ? getPctYTD(cr, pct, yr, upToQ) : getYTD(cr, lc, bo, yr, upToQ);
+    return inPctMode ? getPctYTD(cr, pct, yr, upToQ, lc) : getYTD(cr, lc, bo, yr, upToQ);
   }
 
   // Metrics — YTD + all 4 quarters
@@ -941,7 +958,12 @@ function render() {
     return Array.from({length:12},(_,i)=>{
       const m=i+1, q=qForM(m);
       if(QUARTERS.indexOf(q)>uIdx) return 0;
-      return Math.round(getC(crime,loc,boro,year,q)/3);
+      const raw = Math.round(getC(crime,loc,boro,year,q)/3);
+      if (!isRate) return raw;
+      // For rate: use quarterly rate divided by 3 months
+      const qTotal = getC(crime,loc,boro,year,q);
+      const r = toRate(qTotal,loc,boro,year,q,null);
+      return r==null ? 0 : Math.round((r/3)*10)/10;
     });
   }
   document.getElementById("monthly-sub").textContent=`${primaryYear} vs ${cmpYear} · Q1–${primaryQ}`;
@@ -995,9 +1017,17 @@ function render() {
   document.getElementById("qtr-legend").innerHTML=`
     <span><span class="leg-dot" style="background:${C_CMP}"></span>${cmpYear}</span>
     <span><span class="leg-dot" style="background:${C_CUR}"></span>${primaryYear}</span>`;
+  const qtrCmpData  = QUARTERS.map(q => {
+    const v = getC(crime,loc,boro,cmpYear,q);
+    return isRate ? (toRate(v,loc,boro,cmpYear,q,null)||0) : v;
+  });
+  const qtrCurData  = QUARTERS.map(q => {
+    const v = getC(crime,loc,boro,primaryYear,q);
+    return isRate ? (toRate(v,loc,boro,primaryYear,q,null)||0) : v;
+  });
   drawBars("chart-qtr", QUARTERS, [
-    {label:String(cmpYear), data:QUARTERS.map(q=>getC(crime,loc,boro,cmpYear,q)), color:C_CMP},
-    {label:String(primaryYear), data:QUARTERS.map(q=>getC(crime,loc,boro,primaryYear,q)), color:C_CUR},
+    {label:String(cmpYear), data:qtrCmpData, color:C_CMP},
+    {label:String(primaryYear), data:qtrCurData, color:C_CUR},
   ], "tt-qtr");
 
   // Trend line
@@ -1364,8 +1394,20 @@ function renderMap() {
   const isPrimaryLatest = String(primaryYear) === String(META.current_year);
   const primaryQ = isPrimaryLatest ? META.current_quarter : "Q4";
 
+  // Show/hide map rate toggle — only for citywide
+  const mapRateCtrl = document.getElementById("map-rate-ctrl");
+  const mapIsRate = state.mapRateMode === "rate" && loc === "citywide";
+  if (mapRateCtrl) mapRateCtrl.style.display = loc === "citywide" ? "" : "none";
+  if (loc !== "citywide" && state.mapRateMode === "rate") {
+    state.mapRateMode = "count";
+    document.querySelectorAll("#map-rate-toggle button").forEach(b=>{
+      b.classList.toggle("active", b.dataset.maprate==="count");
+    });
+  }
+  const locLabel = loc === "subway" ? "Subway" : loc === "housing" ? "Housing" : "Citywide";
+  const mapRateLabel = mapIsRate ? " · per 100k residents" : "";
   document.getElementById("map-sub").textContent =
-    `${crime} · ${primaryYear} vs ${cmpYear} · Q1–${primaryQ}`;
+    `${crime} · ${locLabel} · ${primaryYear} vs ${cmpYear} · Q1–${primaryQ}${mapRateLabel}`;
 
   loadGeoData().then(geo => {
     const loading = document.getElementById("map-loading");
@@ -1420,9 +1462,15 @@ function renderMap() {
     geo.features.forEach(f => {
       const pct = parseInt(f.properties.precinct || 0);
       if (!pct) return;
-      const cur = getPctYTD(crime, pct, primaryYear, primaryQ);
-      const prv = getPctYTD(crime, pct, cmpYear, primaryQ);
-      pctChanges[pct] = { cur, prv, pct: prv > 0 ? ((cur-prv)/prv)*100 : null };
+      const curRaw = getPctYTD(crime, pct, primaryYear, primaryQ, loc);
+      const prvRaw = getPctYTD(crime, pct, cmpYear, primaryQ, loc);
+      let cur = curRaw, prv = prvRaw;
+      if (mapIsRate && PCT_POP[String(pct)]) {
+        const pop = PCT_POP[String(pct)];
+        cur = (curRaw / pop) * 100000;
+        prv = (prvRaw / pop) * 100000;
+      }
+      pctChanges[pct] = { cur, prv, curRaw, prvRaw, pct: prv > 0 ? ((cur-prv)/prv)*100 : null };
     });
 
     // Color scale: saturated green → neutral → saturated red
@@ -1587,9 +1635,15 @@ function renderMap() {
           : (change.pct > 0 ? "▲ +" : "▼ ") + change.pct.toFixed(1) + "%";
         const col = change.pct == null ? "#707175"
           : change.pct > 0 ? "#d2232a" : "#3a7a1e";
+        const valFmt = mapIsRate
+          ? v => v.toFixed(1)
+          : v => fmt(v);
+        const valUnit = mapIsRate ? " per 100k" : " complaints";
+        const curDisp = valFmt(change.cur) + valUnit;
+        const prvDisp = valFmt(change.prv) + valUnit;
         tt.innerHTML = `<strong>${pctLabel(pct)}</strong><br>
           <span style="color:${col};font-weight:700;">${pctStr} vs ${cmpYear}</span><br>
-          ${primaryYear}: ${fmt(change.cur)} &nbsp;·&nbsp; ${cmpYear}: ${fmt(change.prv)}`;
+          ${primaryYear}: ${curDisp} &nbsp;·&nbsp; ${cmpYear}: ${prvDisp}`;
         tt.classList.add("visible");
         // Position tooltip
         const ttW = tt.offsetWidth || 200;
@@ -1652,7 +1706,14 @@ async function boot() {
   META.subway_ridership=raw.subway_ridership||{};
   META.population=raw.population||{};
   DATA=raw.data;
-  PCT_DATA=raw.pct_data||{};
+  // pct_data is split by location type
+  const rawPct = raw.pct_data||{};
+  PCT_DATA = {
+    citywide: rawPct.citywide||{},
+    subway:   rawPct.subway||{},
+    housing:  rawPct.housing||{}
+  };
+  PCT_POP = raw.precinct_population || {};
   buildApp();
   render();
 }
