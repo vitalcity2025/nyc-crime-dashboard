@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- saved from url=(0046)file:///C:/Users/paulr/Downloads/index_44.html -->
+<!-- saved from url=(0046)file:///C:/Users/paulr/Downloads/index_45.html -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -896,6 +896,11 @@ function render() {
   const pct = state.precinct;
   const inPctMode = !!(pct && loc === "citywide");
 
+  // isRate must be defined before geo labels (locLabel2 depends on it)
+  const isRate = state.subwayRate;
+  const rateNote = document.getElementById("subway-rate-note");
+  if (rateNote) rateNote.style.display = isRate ? "block" : "none";
+
   // Geography labels — used across all chart subtitles
   const geoShort = inPctMode
     ? `Pct. ${pct}`
@@ -907,6 +912,7 @@ function render() {
     ? (isRate ? "Subway — rate" : "Subway — count")
     : loc === "housing" ? "Housing" : "";
   const fullGeoLabel = locLabel2 ? `${geoLabel} · ${locLabel2}` : geoLabel;
+
   function getC(cr, lc, bo, yr, q) {
     return inPctMode ? getPctCount(cr, pct, yr, q, lc) : getCount(cr, lc, bo, yr, q);
   }
@@ -915,9 +921,6 @@ function render() {
   }
 
   // Metrics — YTD + all 4 quarters
-  const isRate = state.subwayRate; // true only for subway-rate location
-  const rateNote = document.getElementById("subway-rate-note");
-  if (rateNote) rateNote.style.display = isRate ? "block" : "none";
 
 
   const pYTD=getY(crime,loc,boro,primaryYear,primaryQ);
